@@ -7,7 +7,8 @@ sys.path.insert(0, '..')
 from baseline import Baseline
 from sklearn.neural_network import MLPClassifier
 from data_mangle.report_writer import ReportWriter
-from utils.parser import parse_ml_parameters, parse_reader
+from utils.parser import parse_ml_parameters
+from data_mangle.cv_fold_dense_reader import CVFoldDenseReader
 
 
 class BaselineNN(Baseline):
@@ -20,26 +21,18 @@ class BaselineNN(Baseline):
 if __name__ == "__main__":
     kwargs = parse_ml_parameters()
 
-    dataset = 'dota' if not kwargs else kwargs.dataset
-    density = 'dense' if not kwargs else kwargs.density
+    dataset = 'lol_player_champion_ave' if not kwargs else kwargs.dataset
+    nn_hidden = 2 if not kwargs else kwargs.nn_hidden
 
-    feature_config = 'one_way_one_team' if not kwargs else kwargs.nn_featconfig
-    nn_hidden = 100 if not kwargs else kwargs.nn_hidden
-
-    print('use parameter: dataset {}, feature_config: {}, density: {}, nn_hidden: {}'
-          .format(dataset, feature_config, density, nn_hidden))
-    reader = parse_reader(dataset, feature_config, density)
+    data_path = '../input/{}.pickle'.format(dataset)
+    print('use parameter: dataset {}, nn_hidden: {}'.format(dataset, nn_hidden))
 
     baseline = \
         BaselineNN(
-            models=[MLPClassifier(hidden_layer_sizes=(nn_hidden,),),
+            models=[MLPClassifier(hidden_layer_sizes=(nn_hidden,)),
                     # add more grid search models here ...
                     ],
-            # reader=CVFoldLoLSparseReader(data_path=constants.lol_pickle, folds=10,
-            #                              feature_config='champion_summoner_one_team'),
-            # reader=CVFoldSparseReader(data_path=constants.dota_pickle, folds=10,
-            #                           feature_config='one_way_one_team'),
-            reader=reader,
+            reader=CVFoldDenseReader(data_path=data_path, folds=10),
             writer=ReportWriter('result.csv'))
     baseline.cross_valid()
 

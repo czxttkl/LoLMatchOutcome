@@ -24,6 +24,7 @@ class MyPyMongo:
                     player_stat = participant['stats']
                     player_stat['role'] = match_history['role']
                     player_stat['lane'] = match_history['lane']
+                    player_stat['presence'] = 1
                     player_stats.append(player_stat)
                     break
         return player_stats

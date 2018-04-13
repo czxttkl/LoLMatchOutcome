@@ -55,12 +55,12 @@ class Baseline(object):
                 train_accs.append(train_acc)
                 test_accs.append(test_acc)
 
-                print("{}, {}, {}, fold {}: train acc/auc: {:.5f}/{:.5f}, test acc/auc: {:.5f}/{:.5f}, train time: {}"
-                      .format(self.reader.data_src, self.print_model(model), self.reader.print_feature_config(),
+                print("{}, {}, fold {}: train acc/auc: {:.5f}/{:.5f}, test acc/auc: {:.5f}/{:.5f}, train time: {}"
+                      .format(self.reader.data_src, self.print_model(model),
                               i, train_acc, train_auc, test_acc, test_auc, train_time))
 
-            self.writer.write_result(self.reader.data_src, self.print_model(model), self.reader.print_feature_config(),
-                                     numpy.mean(durations), numpy.mean(train_accs), numpy.mean(train_aucs),
+            self.writer.write_result(self.reader.data_src, self.print_model(model), numpy.mean(durations),
+                                     numpy.mean(train_accs), numpy.mean(train_aucs),
                                      numpy.mean(test_accs), numpy.mean(test_aucs))
             self.last_model = model
 
