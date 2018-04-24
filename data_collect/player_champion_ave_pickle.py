@@ -1,5 +1,6 @@
 """
-This file collects data with both player and champion information
+This file collects data with both player and champion information:
+player champion specific stats
 """
 import numpy
 from data_collect.mypymongo import MyPyMongo
@@ -17,8 +18,8 @@ if __name__ == "__main__":
     X, Y = [], []
     # 19: in-game statistics
     # 2: overall win rate, overall num matches
-    # M: one hot encoding of champions
-    num_feat = 21 + M
+    num_feat = 21
+    output_file_name = 'lol_player_champion_ave'
 
     total_match = 0
     for match in mypymongo.db.match_seed.find({'all_participants_matches_crawled': True}, no_cursor_timeout=True):
@@ -49,10 +50,7 @@ if __name__ == "__main__":
             player_stats = mypymongo.find_match_history_in_match(account_id, match_create_time)
             p_feature = numpy.hstack((ave_stats(player_stats, ['win']), len(player_stats)))
 
-            c_feature = numpy.zeros(M)
-            c_feature[champion_idx] = 1
-            feature = numpy.hstack((pc_feature, p_feature, c_feature))
-            assert len(feature) == num_feat
+            feature = numpy.hstack((pc_feature, p_feature))
 
             if side == 'blue':
                 feature = - feature
@@ -75,5 +73,5 @@ if __name__ == "__main__":
     scaler.fit(X)
     X = scaler.transform(X)
 
-    with open('../input/lol_player_champion_ave.pickle', 'wb') as f:
+    with open('../input/{}.pickle'.format(output_file_name), 'wb') as f:
         pickle.dump((X, Y), f)

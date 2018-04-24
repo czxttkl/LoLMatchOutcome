@@ -1,5 +1,6 @@
 """
-This file collects data with both player and champion information
+This file collects data with both player and champion information:
+player champion specific stats + champion vector
 """
 import numpy
 from data_collect.mypymongo import MyPyMongo
@@ -15,9 +16,12 @@ if __name__ == "__main__":
     with open('../input/lol_basic.pickle', 'rb') as f:
         champion_id2idx_dict, M = pickle.load(f)
     X, Y = [], []
+
     # 19: in-game statistics
     # 2: overall win rate, overall num matches
-    num_feat = 21
+    # M: one hot encoding of champions
+    num_feat = 21 + M
+    output_file_name = 'lol_player_champion_ave_champion'
 
     total_match = 0
     for match in mypymongo.db.match_seed.find({'all_participants_matches_crawled': True}, no_cursor_timeout=True):
@@ -33,7 +37,7 @@ if __name__ == "__main__":
             champion_idx = champion_id2idx_dict[champion_id]
             side = participant['side']
 
-            # pc_feature is player-champion specific
+            # pc_feature is player-champion specific feature
             player_stats = mypymongo.find_match_history_in_match(account_id, match_create_time, champion_id=champion_id)
             pc_feature = ave_stats(player_stats, ['win', 'assists', 'deaths', 'kills', 'champLevel',
                                                   'goldEarned', 'goldSpent', 'killingSprees',
@@ -48,7 +52,10 @@ if __name__ == "__main__":
             player_stats = mypymongo.find_match_history_in_match(account_id, match_create_time)
             p_feature = numpy.hstack((ave_stats(player_stats, ['win']), len(player_stats)))
 
-            feature = numpy.hstack((pc_feature, p_feature))
+            c_feature = numpy.zeros(M)
+            c_feature[champion_idx] = 1
+            feature = numpy.hstack((pc_feature, p_feature, c_feature))
+            assert len(feature) == num_feat
 
             if side == 'blue':
                 feature = - feature
@@ -67,9 +74,10 @@ if __name__ == "__main__":
     X = X[shuffle_idx]
     Y = Y[shuffle_idx]
 
+    # only scale player stats
     scaler = StandardScaler()
-    scaler.fit(X)
-    X = scaler.transform(X)
+    X_player = scaler.fit_transform(X[:, :-M])
+    X[:, :-M] = X_player
 
-    with open('../input/lol_player.pickle', 'wb') as f:
+    with open('../input/{}.pickle'.format(output_file_name), 'wb') as f:
         pickle.dump((X, Y), f)
