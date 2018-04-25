@@ -15,14 +15,15 @@ class BaselineNN(Baseline):
 
     def print_model(self, model):
         """ return description of a model as a string """
-        return "NN_hiddenunit{}".format(model.hidden_layer_sizes[0])
+        return "NN_hiddenunit{}_ds{}_fs{}".format(model.hidden_layer_sizes[0],
+                                                  model.train_data_size, model.feature_size)
 
 
 if __name__ == "__main__":
     kwargs = parse_ml_parameters()
 
     dataset = 'lol_player_champion_ave' if not kwargs else kwargs.dataset
-    nn_hidden = 2 if not kwargs else kwargs.nn_hidden
+    nn_hidden = 10 if not kwargs else kwargs.nn_hidden
 
     data_path = '../input/{}.pickle'.format(dataset)
     print('use parameter: dataset {}, nn_hidden: {}'.format(dataset, nn_hidden))

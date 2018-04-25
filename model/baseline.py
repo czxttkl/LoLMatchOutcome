@@ -26,6 +26,8 @@ class Baseline(object):
             for i in range(self.reader.folds):
                 train_data, train_labels, test_data, test_labels = self.to_data_labels(i)
                 model = copy.deepcopy(raw_model)
+                model.train_data_size = len(train_labels)
+                model.feature_size = len(train_data[0])
 
                 t1 = time.time()
                 if show_progress:

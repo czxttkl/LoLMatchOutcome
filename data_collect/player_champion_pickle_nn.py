@@ -18,6 +18,7 @@ if __name__ == "__main__":
     # 19: in-game statistics
     # 2: overall win rate, overall num matches
     num_feat_per_champion = 21
+    output_file_name = 'lol_player_champion_nn'
 
     total_match = 0
     for match in mypymongo.db.match_seed.find({'all_participants_matches_crawled': True}, no_cursor_timeout=True):
@@ -72,5 +73,5 @@ if __name__ == "__main__":
     scaler.fit(X)
     X = scaler.transform(X)
 
-    with open('../input/lol_player_champion_nn.pickle', 'wb') as f:
+    with open('../input/{}.pickle'.format(output_file_name), 'wb') as f:
         pickle.dump((X, Y), f)
