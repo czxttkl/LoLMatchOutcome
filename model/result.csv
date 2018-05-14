@@ -1,0 +1,57 @@
+dataset, model, duration, train_acc, train_auc, test_acc, test_auc
+lol_player_champion_ave_champion, NN_hiddenunit1_ds6379_fs161,0.4,0.60552,0.62232,0.56897,0.58452
+lol_player_champion_ave_champion, NN_hiddenunit2_ds6379_fs161,1,0.62913,0.67306,0.56403,0.58232
+lol_player_champion_ave_champion, NN_hiddenunit3_ds6379_fs161,1.5,0.64955,0.70373,0.5512,0.57752
+lol_player_champion_ave_champion, NN_hiddenunit4_ds6379_fs161,2,0.67214,0.73131,0.54838,0.56918
+lol_player_champion_ave_champion, NN_hiddenunit5_ds6379_fs161,2.3,0.69291,0.75953,0.54245,0.5563
+lol_player_champion_ave_champion, LR_ds6379_fs161,0,0.61093,0.65179,0.56685,0.59615
+lol_player_champion_ave_champion, majority_ds6379_fs161,0,0.51016,0.5,0.52708,0.5
+,,,,,,
+   lol_champion, NN_hiddenunit1_ds6379_fs140,0.5,0.57565,0.58649,0.522,0.52207
+   lol_champion, NN_hiddenunit2_ds6379_fs140,0.9,0.60201,0.63913,0.51848,0.52862
+   lol_champion, NN_hiddenunit3_ds6379_fs140,1.7,0.62529,0.67018,0.52327,0.52962
+   lol_champion, NN_hiddenunit4_ds6379_fs140,1.9,0.648,0.70115,0.50987,0.51793
+   lol_champion, NN_hiddenunit5_ds6379_fs140,3,0.67095,0.73236,0.52285,0.52316
+   lol_champion, LR_ds6379_fs140,0,0.57482,0.60641,0.52722,0.53693
+   lol_champion, majority_ds6379_fs140,0,0.5121,0.5,0.50959,0.5
+,,,,,,
+lol_player_champion_simple_nn, NN_hiddenunit1_ds6379_fs560,0.8,0.59266,0.60874,0.5213,0.52789
+lol_player_champion_simple_nn, NN_hiddenunit2_ds6379_fs560,0.2,0.57716,0.60725,0.51707,0.52828
+lol_player_champion_simple_nn, NN_hiddenunit3_ds6379_fs560,0.2,0.5894,0.6373,0.50423,0.51116
+lol_player_champion_simple_nn, NN_hiddenunit4_ds6379_fs560,0.2,0.61644,0.6727,0.51298,0.51118
+lol_player_champion_simple_nn, NN_hiddenunit5_ds6379_fs560,0.5,0.63043,0.68003,0.51213,0.5119
+lol_player_champion_simple_nn, LR_ds6379_fs560,3.9,0.63312,0.68903,0.53808,0.55132
+lol_player_champion_simple_nn, majority_ds6379_fs560,0,0.51154,0.5,0.51467,0.5
+,,,,,,
+lol_player_champion_ave, NN_hiddenunit1_ds6379_fs21,0.1,0.56644,0.57996,0.55416,0.5712
+lol_player_champion_ave, NN_hiddenunit2_ds6379_fs21,0.6,0.57846,0.60436,0.56657,0.59031
+lol_player_champion_ave, NN_hiddenunit3_ds6379_fs21,0.3,0.57926,0.60766,0.57969,0.60749
+lol_player_champion_ave, NN_hiddenunit4_ds6379_fs21,0.4,0.58131,0.61143,0.57278,0.59305
+lol_player_champion_ave, NN_hiddenunit5_ds6379_fs21,0.5,0.58175,0.61328,0.56756,0.59085
+lol_player_champion_ave, NN_hiddenunit6_ds6379_fs21,0.5,0.58534,0.61654,0.56375,0.59294
+lol_player_champion_ave, NN_hiddenunit7_ds6379_fs21,0.4,0.58551,0.6179,0.56953,0.59451
+lol_player_champion_ave, NN_hiddenunit8_ds6379_fs21,0.4,0.58633,0.61819,0.56897,0.59449
+lol_player_champion_ave, NN_hiddenunit9_ds6379_fs21,0.5,0.58639,0.61979,0.56234,0.58389
+lol_player_champion_ave, NN_hiddenunit10_ds6379_fs21,0.9,0.58892,0.62274,0.56798,0.59723
+lol_player_champion_ave, majority_ds6379_fs21,0,0.51311,0.5,0.50056,0.5
+lol_player_champion_ave,  LR_ds6379_fs21,0,0.58178,0.61196,0.57447,0.60231
+,,,,,,
+ lol_player_ave, NN_hiddenunit1_ds6379_fs19,0,0.52018,0.51762,0.50536,0.50813
+ lol_player_ave, NN_hiddenunit2_ds6379_fs19,0.1,0.52908,0.54185,0.52327,0.52649
+ lol_player_ave, NN_hiddenunit3_ds6379_fs19,0.1,0.53725,0.55588,0.52059,0.53156
+ lol_player_ave, NN_hiddenunit4_ds6379_fs19,0.1,0.5424,0.55946,0.52525,0.52452
+ lol_player_ave, NN_hiddenunit5_ds6379_fs19,0.4,0.54463,0.56632,0.51735,0.52701
+ lol_player_ave, NN_hiddenunit10_ds6379_fs19,0.5,0.55706,0.58547,0.52313,0.53318
+ lol_player_ave, NN_hiddenunit20_ds6379_fs19,0.5,0.57418,0.60658,0.53653,0.55001
+ lol_player_ave, NN_hiddenunit30_ds6379_fs19,0.7,0.58302,0.61821,0.53159,0.5482
+ lol_player_ave, NN_hiddenunit40_ds6379_fs19,0.9,0.59492,0.63544,0.52835,0.54963
+ lol_player_ave, NN_hiddenunit50_ds6379_fs19,1,0.59704,0.63816,0.53018,0.53343
+ lol_player_ave, NN_hiddenunit75_ds6379_fs19,1.9,0.62303,0.67404,0.51834,0.52839
+ lol_player_ave,  LR_ds6379_fs19,0,0.54306,0.56238,0.53047,0.54808
+ lol_player_ave, majority_ds6379_fs19,0,0.51144,0.5,0.51551,0.5
+,,,,,,
+lol_player_champion_nn, NN_hiddenunit1_ds6379_fs2940,15.6,0.75694,0.7693,0.52623,0.53475
+lol_player_champion_nn, NN_hiddenunit2_ds6379_fs2940,23.7,0.87048,0.91792,0.51819,0.52691
+lol_player_champion_nn, NN_hiddenunit3_ds6379_fs2940,23.3,0.91822,0.96011,0.51551,0.5172
+lol_player_champion_nn, majority_ds6379_fs2940,0,0.51201,0.5,0.51044,0.5
+lol_player_champion_nn, LR_ds6379_fs2940,39.4,0.85201,0.92997,0.53498,0.5483
