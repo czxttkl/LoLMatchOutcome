@@ -21,7 +21,7 @@ class BaselineMajority(Baseline):
 if __name__ == "__main__":
     kwargs = parse_ml_parameters()
 
-    dataset = 'lol_player_ave' if not kwargs else kwargs.dataset
+    dataset = 'lol_player_champion_nn' if not kwargs else kwargs.dataset
 
     data_path = '../input/{}.pickle'.format(dataset)
     print('use parameter: dataset {}'.format(dataset))

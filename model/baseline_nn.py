@@ -22,8 +22,8 @@ class BaselineNN(Baseline):
 if __name__ == "__main__":
     kwargs = parse_ml_parameters()
 
-    dataset = 'lol_player_ave' if not kwargs else kwargs.dataset
-    nn_hidden = 75 if not kwargs else kwargs.nn_hidden
+    dataset = 'lol_player_champion_nn' if not kwargs else kwargs.dataset
+    nn_hidden = 3 if not kwargs else kwargs.nn_hidden
 
     data_path = '../input/{}.pickle'.format(dataset)
     print('use parameter: dataset {}, nn_hidden: {}'.format(dataset, nn_hidden))
