@@ -1,5 +1,6 @@
 """
 This file collects data with both player and champion information
+(player champion specific stat + player overall stat) for each champion
 """
 import numpy
 from data_collect.mypymongo import MyPyMongo
