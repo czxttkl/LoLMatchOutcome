@@ -1,5 +1,5 @@
 '''
-From https://github.com/caobokai/DeepMood/blob/master/DeepMood.py
+Adapted from https://github.com/caobokai/DeepMood/blob/master/DeepMood.py
 A demo of DeepMood on synthetic data.
 [bib] DeepMood: Modeling Mobile Phone Typing Dynamics for Mood Detection, B. Cao et al., 2017.
 '''
@@ -112,9 +112,9 @@ def create_model(train_data, test_data, params):
                 drop_output = Dropout(params['dropout'])(sub_output)
                 output_list.append(drop_output)
         x = merge(output_list, mode='concat') if len(output_list) > 1 else output_list[0]
-        latentx = Dense(params['n_latent'] * params['n_classes'], bias=False)(x)
-        bias = Dense(params['n_classes'], bias=True if params['bias'] else False)(x)
-        y = merge([latentx, bias], mode=fm_decision_function, output_shape=(params['n_classes'],))
+        latentx = Dense(params['n_latent'], bias=False)(x)
+        bias = Dense(1, bias=True if params['bias'] else False)(x)
+        y = merge([latentx, bias], mode=fm_decision_function, output_shape=(1,))
         y_act = Activation('sigmoid')(y) if params['is_clf'] else Activation('linear')(y)
         objective = 'binary_crossentropy' if params['is_clf'] else 'mean_squared_error'
         metric = [acc] if params['is_clf'] else [rmse]
