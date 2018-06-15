@@ -13,41 +13,9 @@ from keras.layers.core import *
 from keras.layers.recurrent import *
 from keras.layers.wrappers import *
 from keras.layers.normalization import *
-
-
-def load_data(modes, params, n_samples, max_value=1000):
-    data = {}
-    label = []
-    for mode in modes:
-        data[mode] = []
-    for i in range(n_samples):
-        if random.random() < .5:
-            for mode in modes:
-                # Random sequence length
-                len = random.randint(params['seq_min_len'], params['seq_max_len'])
-                # Generate a linear sequence
-                rand_start = random.randint(0, max_value - len)
-                s = [[float(i) / max_value] for i in
-                     range(rand_start, rand_start + len)]
-                # Pad sequence for dimension consistency
-                s += [[0.] for i in range(params['seq_max_len'] - len)]
-                data[mode].append(s)
-            label.append(1)
-        else:
-            for mode in modes:
-                # Random sequence length
-                len = random.randint(params['seq_min_len'], params['seq_max_len'])
-                # Generate a random sequence
-                s = [[float(random.randint(0, max_value)) / max_value]
-                     for i in range(len)]
-                # Pad sequence for dimension consistency
-                s += [[0.] for i in range(params['seq_max_len'] - len)]
-                data[mode].append(s)
-            label.append(0)
-    for mode in modes:
-        data[mode] = np.array(data[mode])
-    label = np.array(label)
-    return data, label
+from data_mangle.cv_fold_dense_reader import CVFoldDenseReader
+from keras.preprocessing import sequence
+import pickle
 
 
 def evaluate(y_test, y_pred, params):
@@ -91,26 +59,45 @@ def rmse(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_true - y_pred)))
 
 
-def create_model(train_data, test_data, params):
-    input_list = []
+def team_lstm_embed(train_match_data, test_match_data, match_hist_data, team,
+                    input_list, train_list, test_list):
+    if team == 'red':
+        team_keys = ['rp0', 'rp1', 'rp2', 'rp3', 'rp4']
+    elif team == 'blue':
+        team_keys = ['bp0', 'bp1', 'bp2', 'bp3', 'bp4']
+
     output_list = []
+    K.zeros()
+    seq_feat_num = train_match_data['rp0'][0].shape[1]
+
+    for p in team_keys:
+        sub_input = Input(shape=(params['seq_max_len'], seq_feat_num))
+        input_list.append(sub_input)
+        train_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in train_match_data],
+                                              maxlen=params['seq_max_len'])
+        test_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in test_match_data],
+                                             maxlen=params['seq_max_len'])
+        train_list.append(train_data_p)
+        test_list.append(test_data_p)
+        mask_input = Masking(mask_value=0, input_shape=(params['seq_max_len'], seq_feat_num))(sub_input)
+        sub_output = Bidirectional(
+            GRU(output_dim=params['n_hidden'], return_sequences=False, consume_less='mem'))(mask_input)
+        drop_output = Dropout(params['dropout'])(sub_output)
+        output_list.append(drop_output)
+    return output_list
+
+
+def create_model(train_data, test_data, match_hist_data, params):
+    input_list = []
     train_list = []
     test_list = []
 
     if params['idx'] == 2:
-        for mode in train_data.keys():
-            if params['includes_%s' % mode]:
-                sub_input = Input(shape=(params['seq_max_len'], train_data[mode][0].shape[1]))
-                input_list.append(sub_input)
-                train_list.append(train_data[mode])
-                test_list.append(test_data[mode])
-                mask_input = Masking(mask_value=0,
-                                     input_shape=(params['seq_max_len'], train_data[mode][0].shape[1]))\
-                             (sub_input)
-                sub_output = Bidirectional(
-                    GRU(output_dim=params['n_hidden'], return_sequences=False, consume_less='mem'))(mask_input)
-                drop_output = Dropout(params['dropout'])(sub_output)
-                output_list.append(drop_output)
+        red_team_output_list = team_lstm_embed(train_data, test_data, match_hist_data, 'red',
+                                               input_list, train_list, test_list)
+        blue_team_output_list = team_lstm_embed(train_data, test_data, match_hist_data, 'blue',
+                                                input_list, train_list, test_list)
+
         x = merge(output_list, mode='concat') if len(output_list) > 1 else output_list[0]
         latentx = Dense(params['n_latent'], bias=False)(x)
         bias = Dense(1, bias=True if params['bias'] else False)(x)
@@ -124,32 +111,39 @@ def create_model(train_data, test_data, params):
     return model, train_list, test_list
 
 
-def run_model(train_data, test_data, y_train, y_test, params):
-    model, X_train, X_test = create_model(train_data, test_data, params)
-    hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2, \
+def run_model(train_data, test_data, y_train, y_test, match_hist_data, params):
+    model, X_train, X_test = create_model(train_data, test_data, match_hist_data, params)
+    hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
                      nb_epoch=params['n_epochs'], validation_data=(X_test, y_test))
     y_score = model.predict(X_test, batch_size=params['batch_size'], verbose=0)
     y_pred = (np.ravel(y_score) > 0.5).astype('int32') if params['is_clf'] else np.ravel(y_score)
     return y_pred, hist.history
 
 
-modes = ['alphanum', 'special', 'accel']
-params = {'seq_min_len': 10,
-          'seq_max_len': 100,
+params = {
+          'match_hist_path': 'input/lstm_match_hist.lol',
+          'match_path': 'input/lstm_match.lol',
+          'fold': 10,
+          'seq_min_len': 10,
+          'seq_max_len': 2000,
           'batch_size': 256,
           'lr': 0.001,
-          'dropout': 0.1,
+          'dropout': 0.0,
           'n_epochs': 500,
           'n_hidden': 8,
-          'n_latent': 8,
+          # 'n_latent': 8,
           'n_classes': 1,
           'bias': 1,
           'is_clf': 1,
           'idx': 2,  # 1: dnn, 2: dfm, 3: dmvm
-          'includes_alphanum': 1,
-          'includes_special': 1,
-          'includes_accel': 1}
-train_data, y_train = load_data(modes, params, 800)
-test_data, y_test = load_data(modes, params, 200)
-y_pred, hist = run_model(train_data, test_data, y_train, y_test, params)
-res = evaluate(y_test, y_pred, params)
+          }
+
+reader = CVFoldDenseReader(data_path=params['match_path'], folds=params['fold'])
+with open(params['match_hist_path'], 'rw') as f:
+    match_hist_data = pickle.load(f)
+
+for fold in range(params['fold']):
+    # original data format: match_num x each dict contains id of players and champions
+    train_data, y_train, test_data,  y_test = reader.read_train_test_fold(fold)
+    y_pred, hist = run_model(train_data, test_data, y_train, y_test, match_hist_data, params)
+    res = evaluate(y_test, y_pred, params)

@@ -23,9 +23,8 @@ class CVFoldDenseReader(object):
         with open(data_path, 'rb') as f:
             self.X, self.Y = pickle.load(f)
             self.Z = len(self.Y)
-            self.K = len(self.X[0])
 
-        print("CVFoldReader. Z: {0}, K: {1}".format(self.Z, self.K))
+        print("CVFoldReader. Z: {0}".format(self.Z))
 
         self.data_path = data_path
         self.folds = folds

@@ -161,7 +161,7 @@ params = {'seq_min_len': 10,
           'n_epochs': 500,
           'n_hidden': 8,
           'n_latent': 8,
-          'n_classes': 3,
+          'n_classes': 1,
           'bias': 1,
           'is_clf': 1,
           'idx': 2, # 1: dnn, 2: dfm, 3: dmvm
