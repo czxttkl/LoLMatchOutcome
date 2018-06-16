@@ -11,7 +11,7 @@ from utils.parser import parse_ml_parameters
 from data_mangle.cv_fold_dense_reader import CVFoldDenseReader
 
 
-class BaselineNN(Baseline):
+class BaselineLR(Baseline):
 
     def print_model(self, model):
         """ return description of a model as a string """
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     print('use parameter: dataset {}, '.format(dataset))
 
     baseline = \
-        BaselineNN(
+        BaselineLR(
             models=[LogisticRegression(fit_intercept=True),
                     # add more grid search models here ...
                     ],
