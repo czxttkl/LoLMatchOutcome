@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     baseline = \
         BaselineNN(
-            models=[LogisticRegression(fit_intercept=False),
+            models=[LogisticRegression(fit_intercept=True),
                     # add more grid search models here ...
                     ],
             reader=CVFoldDenseReader(data_path=data_path, folds=10),
