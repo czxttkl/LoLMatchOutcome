@@ -1,6 +1,6 @@
 """
-This file collects data with both player and champion information:
-player champion specific stats
+This file collects player overall stats, and take average for teammates,
+then take difference between red and blue teams
 """
 import numpy
 from data_collect.mypymongo import MyPyMongo
