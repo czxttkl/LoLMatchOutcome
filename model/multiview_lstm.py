@@ -161,8 +161,12 @@ def train():
 
 
 if __name__ == '__main__':
+    with open('../input/lol_basic.pickle', 'rb') as f:
+        # M: number of champions, N: number of players
+        champion_id2idx_dict, M, summoner_id2idx_dict, N = pickle.load(f)
+
     params = {
-              'champion_num': 161,
+              'champion_num': M,
               'match_hist_path': 'input/lstm_match_hist.lol',
               'match_path': 'input/lstm_match.lol',
               'fold': 10,
