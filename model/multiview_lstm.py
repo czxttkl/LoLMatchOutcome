@@ -20,16 +20,10 @@ import pickle
 
 def evaluate(y_test, y_pred):
     res = {}
-    if params['is_clf']:
-        res['accuracy'] = float(sum(y_test == y_pred)) / len(y_test)
-        res['precision'] = float(sum(y_test & y_pred) + 1) / (sum(y_pred) + 1)
-        res['recall'] = float(sum(y_test & y_pred) + 1) / (sum(y_test) + 1)
-        res['f_score'] = 2.0 * res['precision'] * res['recall'] / (res['precision'] + res['recall'])
-    else:
-        res['rmse'] = np.sqrt(np.mean(np.square(y_test - y_pred)))
-        res['mae'] = np.mean(np.abs(y_test - y_pred))
-        res['explained_variance_score'] = 1 - np.square(np.std(y_test - y_pred)) / np.square(np.std(y_test))
-        res['r2_score'] = 1 - np.sum(np.square(y_test - y_pred)) / np.sum(np.square(y_test - np.mean(y_test)))
+    res['accuracy'] = float(sum(y_test == y_pred)) / len(y_test)
+    res['precision'] = float(sum(y_test & y_pred) + 1) / (sum(y_pred) + 1)
+    res['recall'] = float(sum(y_test & y_pred) + 1) / (sum(y_test) + 1)
+    res['f_score'] = 2.0 * res['precision'] * res['recall'] / (res['precision'] + res['recall'])
     print(' '.join(["%s: %.4f" % (i, res[i]) for i in res]))
     return res
 
@@ -60,6 +54,7 @@ def rmse(y_true, y_pred):
 
 
 def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, team,
+                           mask_layer, gru_layer, drop_layer,
                            input_list, train_list, test_list):
     team_keys = []
     if team == 'red':
@@ -79,17 +74,17 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
-        mask_input = Masking(mask_value=0, input_shape=(params['seq_max_len'], seq_feat_num))(sub_input)
-        sub_output = Bidirectional(
-            GRU(output_dim=params['n_hidden'], return_sequences=False, consume_less='mem'))(mask_input)
-        drop_output = Dropout(params['dropout'])(sub_output)
+        mask_input = mask_layer(sub_input)
+        sub_output = gru_layer(mask_input)
+        drop_output = drop_layer(sub_output)
         output_list.append(drop_output)
 
     team_embed = merge(output_list, mode='concat', output_shape=(5*params['n_hidden'],))
     return team_embed
 
 
-def team_champ_embed(champ_embed, train_match_data, test_match_data, team, input_list, train_list, test_list):
+def team_champ_embed(champ_embed, champ_bias, train_match_data, test_match_data, team,
+                     input_list, train_list, test_list):
     team_keys = []
     if team == 'red':
         team_keys = ['rc0', 'rc1', 'rc2', 'rc3', 'rc4']
@@ -101,7 +96,8 @@ def team_champ_embed(champ_embed, train_match_data, test_match_data, team, input
     test_list.append(([[match_data[k] for k in team_keys] for match_data in test_match_data]))
     champ_embed = champ_embed(champ_input)
     champ_embed = Reshape((5 * params['n_hidden'],))(champ_embed)
-    return champ_embed
+    champ_bias = K.sum(champ_bias(champ_input))
+    return champ_embed, champ_bias
 
 
 def create_model(train_data, test_data, match_hist_data):
@@ -110,25 +106,35 @@ def create_model(train_data, test_data, match_hist_data):
     test_list = []
     y_act = None
     objective = None
+
+    seq_feat_num = train_data['rp0'][0].shape[1]
+    mask_layer = Masking(mask_value=0, input_shape=(params['seq_max_len'], seq_feat_num))
+    gru_layer = Bidirectional(GRU(output_dim=params['n_hidden'], return_sequences=False, consume_less='mem'))
+    drop_layer = Dropout(params['dropout'])
     red_player_embed = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
+                                              mask_layer, gru_layer, drop_layer,
                                               input_list, train_list, test_list)
     blue_player_embed = team_player_lstm_embed(train_data, test_data, match_hist_data, 'blue',
+                                               mask_layer, gru_layer, drop_layer,
                                                input_list, train_list, test_list)
+
     if params['idx'] == 2:
-        # input_dim: maximum champion integer index + 1
-        champ_embed = Embedding(input_dim=params['champion_num'] + 1, output_dim=params['n_hidden'],
+        champ_embed = Embedding(input_dim=params['champion_num'], output_dim=params['n_hidden'],
                                 input_length=5, embeddings_initializer='uniform')
-        red_champ_embed = team_champ_embed(champ_embed, train_data, test_data, 'red',
-                                           input_list, train_list, test_list)
-        blue_champ_embed = team_champ_embed(champ_embed, train_data, test_data, 'blue',
-                                            input_list, train_list, test_list)
+        champ_bias = Embedding(input_dim=params['champion_num'], output_dim=1,
+                               input_length=5, embeddings_initializer='uniform')
+        red_champ_embed, red_champ_bias = team_champ_embed(champ_embed, champ_bias, train_data, test_data, 'red',
+                                                           input_list, train_list, test_list)
+        blue_champ_embed, blue_champ_bias = team_champ_embed(champ_embed, champ_bias, train_data, test_data, 'blue',
+                                                            input_list, train_list, test_list)
         red_player_champ_dot = dot([red_player_embed, red_champ_embed], axes=-1)
         blue_player_champ_dot = dot([blue_player_embed, blue_champ_embed], axes=-1)
-        y = merge([red_player_champ_dot, blue_player_champ_dot], mode='concat', output_shape=(2,))
-        y_act = Dense(1, activation='sigmoid' if params['is_clf'] else 'linear',
-                      bias=True if params['bias'] else False)(y)
-        objective = 'binary_crossentropy' if params['is_clf'] else 'mean_squared_error'
-        metric = [acc] if params['is_clf'] else [rmse]
+        y = merge([red_player_champ_dot, blue_player_champ_dot, red_champ_bias, blue_champ_bias],
+                  mode='concat', output_shape=(4,))
+        # bias=True for red/blue team difference. the whole layer is set untrainable.
+        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
+        objective = 'binary_crossentropy'
+        metric = [acc]
     elif params['idx'] == 3:
         # set trainable to False as freeze layer.
         # see https://keras.io/getting-started/faq/#how-can-i-freeze-keras-layers
@@ -144,7 +150,7 @@ def run_model(train_data, test_data, y_train, y_test, match_hist_data):
     hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
                      nb_epoch=params['n_epochs'], validation_data=(X_test, y_test))
     y_score = model.predict(X_test, batch_size=params['batch_size'], verbose=0)
-    y_pred = (np.ravel(y_score) > 0.5).astype('int32') if params['is_clf'] else np.ravel(y_score)
+    y_pred = (np.ravel(y_score) > 0.5).astype('int32')
     return y_pred, hist.history
 
 
@@ -179,8 +185,8 @@ if __name__ == '__main__':
               'n_hidden': 8,
               # 'n_latent': 8,
               'n_classes': 1,
-              'bias': 1,
-              'is_clf': 1,
+              # 'bias': 1,
+              # 'is_clf': 1,
               'idx': 2,  # 1: player average, 2: player-champion dot, 3: dmvm
               }
     train()
