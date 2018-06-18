@@ -221,7 +221,7 @@ def create_model(train_data, test_data, match_hist_data):
         red_player_embed = merge(red_player_embeds, mode='sum', output_shape=(params['n_hidden'],))
         blue_player_embed = merge(blue_player_embeds, mode='sum', output_shape=(params['n_hidden'],))
         y = subtract([red_player_embed, blue_player_embed])
-        # bias=True for red/blue team difference. 
+        # bias=True for red/blue team difference.
         y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='uniform')(y)
     elif params['idx'] == 2:
         red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
