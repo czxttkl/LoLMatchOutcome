@@ -205,14 +205,25 @@ def create_model(train_data, test_data, match_hist_data):
     train_list = []
     test_list = []
     y_act = None
-    objective = None
 
     seq_feat_num = train_data['rp0'][0].shape[1]
     mask_layer = Masking(mask_value=0, input_shape=(params['seq_max_len'], seq_feat_num))
     gru_layer = Bidirectional(GRU(output_dim=params['n_hidden'], return_sequences=False, consume_less='mem'))
     drop_layer = Dropout(params['dropout'])
 
-    if params['idx'] == 2:
+    if params['idx'] == 1:
+        red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
+                                                   mask_layer, gru_layer, drop_layer,
+                                                   input_list, train_list, test_list)
+        blue_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'blue',
+                                                    mask_layer, gru_layer, drop_layer,
+                                                    input_list, train_list, test_list)
+        red_player_embed = merge(red_player_embeds, mode='sum', output_shape=(params['n_hidden'],))
+        blue_player_embed = merge(blue_player_embeds, mode='sum', output_shape=(params['n_hidden'],))
+        y = subtract([red_player_embed, blue_player_embed])
+        # bias=True for red/blue team difference. 
+        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='uniform')(y)
+    elif params['idx'] == 2:
         red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
                                                    mask_layer, gru_layer, drop_layer,
                                                    input_list, train_list, test_list)
