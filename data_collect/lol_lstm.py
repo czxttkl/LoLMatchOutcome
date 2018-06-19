@@ -1,5 +1,5 @@
 """
-Use this file to generate input/lol.pickle
+Use this file to generate data for lstm
 """
 import pickle
 import time
@@ -42,6 +42,8 @@ def get_data():
                 x['bp' + str(b_cnt)] = summoner_id2idx_dict[participant['accountId']]
                 x['bc' + str(b_cnt)] = champion_id2idx_dict[participant['championId']]
                 b_cnt += 1
+        # timestamp
+        x['t'] = match['gameCreation']
         X.append(x)
 
     return X, Y

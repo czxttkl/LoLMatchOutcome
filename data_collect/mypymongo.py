@@ -1,8 +1,5 @@
 from pymongo import MongoClient
-import itertools
-import json
-from pymongo.errors import DuplicateKeyError
-
+import pymongo
 
 class MyPyMongo:
 
@@ -12,19 +9,30 @@ class MyPyMongo:
 
     def find_match_history_in_match(self, account_id, before_time, champion_id=None):
         player_stats = []
-        query_dict = {'accountId': account_id, 'timestamp': {'$lt': before_time}, 'season': 11, 'queue': 420}
+        query_dict = {'accountId': account_id,
+                      'timestamp': {'$lt': before_time},
+                      'season': 11,
+                      'queue': 420,
+                      }
         if champion_id is not None:
              query_dict['champion'] = champion_id
 
-        for match_history in self.db.player_seed_match_history.find(query_dict):
+        for match_history in self.db.player_seed_match_history.find(query_dict) \
+                .sort([("timestamp", pymongo.ASCENDING)]):
             match_id = match_history['gameId']
             match = self.db.match.find_one({'id': match_id})
+            # only legitimately long match
+            if match['duration'] < 300:
+                continue
             for participant in match['participants']:
                 if participant['accountId'] == account_id:
                     player_stat = participant['stats']
                     player_stat['role'] = match_history['role']
                     player_stat['lane'] = match_history['lane']
                     player_stat['presence'] = 1
+                    player_stat['timestamp'] = match['gameCreation']
+                    player_stat['duration'] = match['gameDuration']
+                    player_stat['id'] = match['id']
                     player_stats.append(player_stat)
                     break
         return player_stats
