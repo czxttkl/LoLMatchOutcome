@@ -29,6 +29,7 @@ class MyPyMongo:
                     player_stat = participant['stats']
                     player_stat['role'] = match_history['role']
                     player_stat['lane'] = match_history['lane']
+                    player_stat['champion_id'] = match_history['champion']
                     player_stat['presence'] = 1
                     player_stat['timestamp'] = match['gameCreation']
                     player_stat['duration'] = match['gameDuration']

@@ -100,6 +100,7 @@ for cnt, match in enumerate(mypymongo.db.match_seed.find({}, no_cursor_timeout=T
         feature_vec = numpy.zeros((len(mh), len(useful_features) + 2))
         role_vec = numpy.zeros((len(mh), len(role_dict)))
         lane_vec = numpy.zeros((len(mh), len(lane_dict)))
+        champ_vec = numpy.zeros((len(mh), 1))
         for i, m in enumerate(mh):
             for j, k in enumerate(useful_features):
                 if m.get(k) is None:
@@ -127,8 +128,9 @@ for cnt, match in enumerate(mypymongo.db.match_seed.find({}, no_cursor_timeout=T
                 lane_vec[i, lane_dict['NONE']] = 1
             else:
                 lane_vec[i, lane_dict[m['lane']]] = 1
+            champ_vec[i, 0] = m['champion_id']
 
-        match_hist[summoner_id2idx_dict[account_id]] = numpy.hstack((role_vec, lane_vec, feature_vec))
+        match_hist[summoner_id2idx_dict[account_id]] = numpy.hstack((champ_vec, role_vec, lane_vec, feature_vec))
 
 with open('../input/match_hist.pickle', 'wb') as f:
     pickle.dump(match_hist, f)
