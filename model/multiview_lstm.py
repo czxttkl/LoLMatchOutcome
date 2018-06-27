@@ -54,12 +54,16 @@ def rmse(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_true - y_pred)))
 
 
-def transform_match_hist(mh):
+def transform_match_hist(mh, mt):
     # convert champion into one hot encoding
     champ_vecs = numpy.zeros((len(mh), params['champion_num']))
     # the first column of mh is champion id
     champ_vecs[:, mh[:, 0]] = 1
     transformed = numpy.hstack((champ_vecs, mh[:, 1:]))
+    # only matches before match time (mt)
+    transformed = transformed[:, transformed[:, -1] < mt]
+    # time transform to log
+    transformed[:, -1] = numpy.log((mt - transformed[:, -1]) / 1000 / 60 / 60)
     return transformed
 
 
@@ -79,11 +83,11 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
         sub_input = Input(shape=(params['seq_max_len'], seq_feat_num))
         input_list.append(sub_input)
         train_data_p = sequence.pad_sequences([transform_match_hist(
-                                                match_hist_data[match_data[p]]
+                                                match_hist_data[match_data[p]], match_data['t']
                                                ) for match_data in train_match_data],
                                               maxlen=params['seq_max_len'])
         test_data_p = sequence.pad_sequences([transform_match_hist(
-                                               match_hist_data[match_data[p]]
+                                               match_hist_data[match_data[p]], match_data['t']
                                                ) for match_data in test_match_data],
                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
