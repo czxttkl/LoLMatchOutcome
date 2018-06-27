@@ -25,15 +25,16 @@ def get_data():
         if cnt == 1000:
             break
 
-        for team in match['teams']:
-            if team['side'] == 'red':
-                if team['isWinner']:
-                    Y.append(1)
-                else:
-                    Y.append(0)
         x = {}
         r_cnt, b_cnt = 0, 0
+        invalid_participant = False
         for participant in match['participants']:
+            # 1522602430025 is the latest match in match_seed
+            match_hist = mypymongo.find_match_history_in_match(participant['accountId'], 1522602430025)
+            if len(match_hist) == 0:
+                invalid_participant = True
+                break
+
             if participant['side'] == 'red':
                 x['rp' + str(r_cnt)] = summoner_id2idx_dict[participant['accountId']]
                 x['rc' + str(r_cnt)] = champion_id2idx_dict[participant['championId']]
@@ -42,9 +43,21 @@ def get_data():
                 x['bp' + str(b_cnt)] = summoner_id2idx_dict[participant['accountId']]
                 x['bc' + str(b_cnt)] = champion_id2idx_dict[participant['championId']]
                 b_cnt += 1
+
+        if invalid_participant:
+            print("invalid participant due to zero match history")
+            continue
+
         # timestamp
         x['t'] = match['gameCreation']
         X.append(x)
+
+        for team in match['teams']:
+            if team['side'] == 'red':
+                if team['isWinner']:
+                    Y.append(1)
+                else:
+                    Y.append(0)
 
     return X, Y
 
