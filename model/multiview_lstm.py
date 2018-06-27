@@ -16,6 +16,7 @@ from keras.layers.normalization import *
 from data_mangle.cv_fold_dense_reader import CVFoldDenseReader
 from keras.preprocessing import sequence
 import pickle
+import numpy
 
 
 def evaluate(y_test, y_pred):
@@ -53,6 +54,15 @@ def rmse(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_true - y_pred)))
 
 
+def transform_match_hist(mh):
+    # convert champion into one hot encoding
+    champ_vecs = numpy.zeros((len(mh), params['champion_num']))
+    # the first column of mh is champion id
+    champ_vecs[:, mh[:, 0]] = 1
+    transformed = numpy.hstack((champ_vecs, mh[:, 1:]))
+    return transformed
+
+
 def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, team,
                            mask_layer, gru_layer, drop_layer,
                            input_list, train_list, test_list):
@@ -68,9 +78,13 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
     for p in team_keys:
         sub_input = Input(shape=(params['seq_max_len'], seq_feat_num))
         input_list.append(sub_input)
-        train_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in train_match_data],
+        train_data_p = sequence.pad_sequences([transform_match_hist(
+                                                match_hist_data[match_data[p]]
+                                               ) for match_data in train_match_data],
                                               maxlen=params['seq_max_len'])
-        test_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in test_match_data],
+        test_data_p = sequence.pad_sequences([transform_match_hist(
+                                               match_hist_data[match_data[p]]
+                                               ) for match_data in test_match_data],
                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
@@ -113,10 +127,14 @@ def team_player_champ_lstm_embed(train_match_data, test_match_data, match_hist_d
     for p, c in team_keys:
         p_hist_input = Input(shape=(params['seq_max_len'], seq_feat_num))
         input_list.append(p_hist_input)
-        train_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in train_match_data],
+        train_data_p = sequence.pad_sequences([transform_match_hist(
+                                               match_hist_data[match_data[p]]
+                                               ) for match_data in train_match_data],
                                               maxlen=params['seq_max_len'])
-        test_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in test_match_data],
-                                             maxlen=params['seq_max_len'])
+        test_data_p = sequence.pad_sequences([transform_match_hist(
+                                               match_hist_data[match_data[p]]
+                                               ) for match_data in test_match_data],
+                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
         mask_input = mask_layer(p_hist_input)
@@ -152,9 +170,13 @@ def team_player_champ_lstm_nn(train_match_data, test_match_data, match_hist_data
     for p, c in team_keys:
         p_hist_input = Input(shape=(params['seq_max_len'], seq_feat_num))
         input_list.append(p_hist_input)
-        train_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in train_match_data],
+        train_data_p = sequence.pad_sequences([transform_match_hist(
+                                                match_hist_data[match_data[p]]
+                                                ) for match_data in train_match_data],
                                               maxlen=params['seq_max_len'])
-        test_data_p = sequence.pad_sequences([match_hist_data[match_data[p]] for match_data in test_match_data],
+        test_data_p = sequence.pad_sequences([transform_match_hist(
+                                                match_hist_data[match_data[p]]
+                                                ) for match_data in test_match_data],
                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
@@ -329,9 +351,8 @@ def run_model(train_data, test_data, y_train, y_test, match_hist_data):
 
 def train():
     reader = CVFoldDenseReader(data_path=params['match_path'], folds=params['fold'])
-    with open(params['match_hist_path'], 'rw') as f:
+    with open(params['match_hist_path'], 'rb') as f:
         match_hist_data = pickle.load(f)
-
     for fold in range(params['fold']):
         # original data format: match_num x each dict contains id of players and champions
         train_data, y_train, test_data, y_test = reader.read_train_test_fold(fold)
@@ -346,8 +367,8 @@ if __name__ == '__main__':
 
     params = {
               'champion_num': M,
-              'match_hist_path': 'input/lstm_match_hist.lol',
-              'match_path': 'input/lstm_match.lol',
+              'match_hist_path': '../input/lol_lstm_match_hist.lol',
+              'match_path': '../input/lol_lstm_match.lol',
               'fold': 10,
               'seq_min_len': 10,
               'seq_max_len': 1500,

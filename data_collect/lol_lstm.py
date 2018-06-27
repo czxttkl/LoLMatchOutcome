@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     X, Y = get_data()
 
-    with open("../input/lol_lstm.pickle", "wb") as f:
+    with open("../input/lol_lstm_match.pickle", "wb") as f:
         pickle.dump((X, Y), f)
 
     print("total process time", time.time() - start_time)

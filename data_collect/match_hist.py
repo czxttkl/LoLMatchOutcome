@@ -128,11 +128,11 @@ for cnt, match in enumerate(mypymongo.db.match_seed.find({}, no_cursor_timeout=T
                 lane_vec[i, lane_dict['NONE']] = 1
             else:
                 lane_vec[i, lane_dict[m['lane']]] = 1
-            champ_vec[i, 0] = m['champion_id']
+            champ_vec[i, 0] = champion_id2idx_dict[m['champion_id']]
 
         match_hist[summoner_id2idx_dict[account_id]] = numpy.hstack((champ_vec, role_vec, lane_vec, feature_vec))
 
-with open('../input/match_hist.pickle', 'wb') as f:
+with open('../input/lol_lstm_match_hist.pickle', 'wb') as f:
     pickle.dump(match_hist, f)
 
 print("total process time", time.time() - start_time)
