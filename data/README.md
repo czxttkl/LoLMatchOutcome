@@ -14,8 +14,10 @@ where `data_path` is a self-defined directory for storing mongodb data.
 
 2. Download mongodb dump file: https://www.dropbox.com/s/2mnf0gv00zarjje/dump.agz?dl=0 
 
-3. use mongodump to restore the database.
+3. use mongodump to restore the database
+```
 bin/mongorestore --drop --gzip --archive=dump.agz
+```
 
 4. connect to mongodb shell and check the database is successfully restored:
 ```
