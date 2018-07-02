@@ -18,6 +18,7 @@ where `data_path` is a self-defined directory for storing mongodb data.
 ```
 bin/mongorestore --drop --gzip --archive=dump.agz
 ```
+80GB free disk space is needed.
 
 4. connect to mongodb shell and check the database is successfully restored:
 ```
