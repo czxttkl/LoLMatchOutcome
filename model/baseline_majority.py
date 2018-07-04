@@ -31,7 +31,7 @@ if __name__ == "__main__":
             models=[DummyClassifier(strategy='most_frequent'),
                     # add more grid search models here ...
                     ],
-            reader=CVFoldDenseReader(data_path=data_path, folds=10),
+            reader=CVFoldDenseReader(data_path=data_path, folds=1, seed=715),
             writer=ReportWriter('result.csv'))
     baseline.cross_valid()
 

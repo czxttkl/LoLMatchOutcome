@@ -354,7 +354,7 @@ def run_model(train_data, test_data, y_train, y_test, match_hist_data):
 
 
 def train():
-    reader = CVFoldDenseReader(data_path=params['match_path'], folds=params['fold'])
+    reader = CVFoldDenseReader(data_path=params['match_path'], folds=params['fold'], seed=715)
     with open(params['match_hist_path'], 'rb') as f:
         match_hist_data = pickle.load(f)
     for fold in range(params['fold']):
@@ -373,7 +373,7 @@ if __name__ == '__main__':
               'champion_num': M,
               'match_hist_path': '../input/lol_lstm_match_hist.lol',
               'match_path': '../input/lol_lstm_match.lol',
-              'fold': 10,
+              'fold': 1,
               'seq_min_len': 10,
               'seq_max_len': 1500,
               'batch_size': 256,
