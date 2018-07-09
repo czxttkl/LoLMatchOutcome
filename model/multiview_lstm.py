@@ -200,12 +200,16 @@ def team_player_champ_lstm_nn(train_match_data, test_match_data, match_hist_data
     #  [1, 0],       [[4,5,6],         [4,5,6],
     #  [0, 0],   *    [1,2,3]]    =    [0,0,0],
     #  [0, 0],                         [0,0,0],
-    #  [0,0]]                          [0,0,0]]
+    #  [0, 0]]                         [0,0,0]]
     player_embed_mat = K.tf.stack(p_output_list)
     champ_onehot_mat = K.tf.transpose(K.tf.stack(c_output_list))
     out = K.tf.matmul(champ_onehot_mat, player_embed_mat)
-    out_flat = Reshape((params['champion_num'] * (params['n_hidden'] + 1),))(out)
-    return out_flat
+    out_flat = Reshape((params['champion_num'] * params['n_hidden'],))(out)
+    # concatenate champion one hot encoding so that we can capture pure champion interaction
+    champ_onehot_vec = merge(c_output_list, mode='sum', output_shape=(params['champion_num'],))
+    out_final = merge([out_flat, champ_onehot_vec], mode='concat',
+                      output_shape=((params['n_hidden'] + 1) * params['champion_num'],))
+    return out_final
 
 
 def synergy(team_embeds, syng_mat):
@@ -336,6 +340,23 @@ def create_model(train_data, test_data, match_hist_data):
                   mode='sum', output_shape=(params['champion_num'] * (params['n_hidden'] + 1),))
         # bias=True for red/blue team difference. all weights will be normalized relative to the bias's weight
         y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
+    elif params['idx'] == 6:
+        # set trainable to False as freeze layer.
+        # see https://keras.io/getting-started/faq/#how-can-i-freeze-keras-layers
+        champ_one_hot = Embedding(input_dim=params['champion_num'], output_dim=params['champion_num'], input_length=1,
+                                  embeddings_initializer='identity', trainable=False)
+        red_player_champ_embed = team_player_champ_lstm_nn(train_data, test_data, match_hist_data, 'red',
+                                                           mask_layer, gru_layer, drop_layer, champ_one_hot,
+                                                           input_list, train_list, test_list)
+        blue_player_champ_embed = team_player_champ_lstm_nn(train_data, test_data, match_hist_data, 'blue',
+                                                            mask_layer, gru_layer, drop_layer, champ_one_hot,
+                                                            input_list, train_list, test_list)
+        team_embed_matrix = Dense(params['n_hidden1'], activation='relu', bias=True, kernel_initializer='uniform')
+        red_team_embed = team_embed_matrix(red_player_champ_embed)
+        blue_team_embed = team_embed_matrix(blue_player_champ_embed)
+        y = merge([red_team_embed, K.tf.multiply(-1, blue_team_embed)], mode='sum', output_shape=(params['n_hidden1'],))
+        # bias=True for red/blue team difference. all weights will be normalized relative to the bias's weight
+        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
 
     objective = 'binary_crossentropy'
     metric = [acc]
@@ -381,7 +402,8 @@ if __name__ == '__main__':
               'dropout': 0.0,
               'n_epochs': 500,
               'n_hidden': 8,
-              # 'n_latent': 8,
+              # some models require two types of hidden units
+              'n_hidden1': 8,
               'n_classes': 1,
               # 'bias': 1,
               # 'is_clf': 1,
@@ -390,6 +412,8 @@ if __name__ == '__main__':
               # 2: player lstm - champion embedding dot product,
               # 3: player contextualized by champion one-hot 
               # 4: 3 + synergy + opposition
-              # 5: fully-connected nn, each champion has a lstm block
+              # 5: fully-connected nn, each champion has a lstm block, then two teams sum
+              # 6: fully-connected nn, each champion has a lstm block,
+              # then form a team embedding, then two team embedding sum
               }
     train()
