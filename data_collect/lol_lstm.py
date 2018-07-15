@@ -20,9 +20,9 @@ def get_data():
 
     X, Y = [], []
     for cnt, match in enumerate(mypymongo.db.match_seed.find({}, no_cursor_timeout=True)):
-        if cnt % 100 == 0:
+        if cnt % 10 == 0:
             print("process {} match".format(cnt))
-        if cnt == 1000:
+        if cnt == 200:
             break
 
         x = {}
@@ -33,6 +33,7 @@ def get_data():
             match_hist = mypymongo.find_match_history_in_match(participant['accountId'], 1522602430025)
             if len(match_hist) == 0:
                 invalid_participant = True
+                print('find invalid participants with no match history', participant['accountId'], match['id'])
                 break
 
             if participant['side'] == 'red':

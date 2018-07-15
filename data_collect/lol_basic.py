@@ -4,11 +4,13 @@ generate basic information of lol
 from mypymongo import MyPyMongo
 import pickle
 
+
 def update_dict(d: dict, key):
     if d.get(key) is None:
         key_id = len(d)
         d[key] = key_id
     return d
+
 
 mypymongo = MyPyMongo()
 champion_id2idx_dict, summoner_id2idx_dict = {}, {}
