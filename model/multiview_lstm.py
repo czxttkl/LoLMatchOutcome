@@ -365,8 +365,9 @@ def create_model(train_data, test_data, match_hist_data):
     return model, train_list, test_list
 
 
-def run_model(train_data, test_data, y_train, y_test, match_hist_data):
-    model, X_train, X_test = create_model(train_data, test_data, match_hist_data)
+def run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data):
+    # x: raw data, X: transformed data
+    model, X_train, X_test = create_model(x_train, x_test, match_hist_data)
     hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
                      nb_epoch=params['n_epochs'], validation_data=(X_test, y_test))
     y_score = model.predict(X_test, batch_size=params['batch_size'], verbose=0)
@@ -375,13 +376,18 @@ def run_model(train_data, test_data, y_train, y_test, match_hist_data):
 
 
 def train():
-    reader = CVFoldDenseReader(data_path=params['match_path'], folds=params['fold'], seed=715)
     with open(params['match_hist_path'], 'rb') as f:
-        match_hist_data = pickle.load(f)
+        match_hist_data, _, _, _ = pickle.load(f)
+    with open(params['match_path'], 'rb') as f:
+        match_data = pickle.load(f)
+        assert len(match_data.keys()) <= params['fold']
+
     for fold in range(params['fold']):
         # original data format: match_num x each dict contains id of players and champions
-        train_data, y_train, test_data, y_test = reader.read_train_test_fold(fold)
-        y_pred, hist = run_model(train_data, test_data, y_train, y_test, match_hist_data)
+        x_train, y_train = match_data[fold]['train'][0], match_data[fold]['train'][1]
+        x_test, y_test = match_data[fold]['test'][0], match_data[fold]['test'][1]
+        x_valid, y_valid = match_data[fold]['valid'][0], match_data[fold]['valid'][1]
+        y_pred, hist = run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data)
         res = evaluate(y_test, y_pred)
 
 
