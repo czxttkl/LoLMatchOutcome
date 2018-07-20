@@ -151,6 +151,7 @@ for cnt, match in enumerate(mypymongo.db.match_seed.find({}, skip=skip_match, no
                 lane_vec[i, lane_dict[m['lane']]] = 1
             champ_vec[i, 0] = champion_id2idx_dict[m['champion_id']]
 
+        # must put champ_vec in the first column, which will be used in lstm training
         match_hist[summoner_id2idx_dict[account_id]] = (champ_vec, role_vec, lane_vec, feature_vec, time_vec)
 
         feature_sum += numpy.sum(feature_vec, axis=0)

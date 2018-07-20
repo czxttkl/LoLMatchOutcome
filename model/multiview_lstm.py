@@ -13,7 +13,6 @@ from keras.layers.core import *
 from keras.layers.recurrent import *
 from keras.layers.wrappers import *
 from keras.layers.normalization import *
-from data_mangle.cv_fold_dense_reader import CVFoldDenseReader
 from keras.preprocessing import sequence
 import pickle
 import numpy
@@ -58,10 +57,12 @@ def transform_match_hist(mh, mt):
     # convert champion into one hot encoding
     champ_vecs = numpy.zeros((len(mh), params['champion_num']))
     # the first column of mh is champion id
-    champ_vecs[:, mh[:, 0]] = 1
+    champ_vecs[:, mh[:, 0].astype(int)] = 1
     transformed = numpy.hstack((champ_vecs, mh[:, 1:]))
     # only matches before match time (mt)
-    transformed = transformed[:, transformed[:, -1] < mt]
+    transformed = transformed[transformed[:, -1] < mt, :]
+    # truncate rows to params['seq_max_len']
+    transformed = transformed[:params['seq_max_len'], :]
     # time transform to log
     transformed[:, -1] = numpy.log((mt - transformed[:, -1]) / 1000 / 60 / 60)
     return transformed
@@ -77,11 +78,10 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
         team_keys = ['bp0', 'bp1', 'bp2', 'bp3', 'bp4']
 
     output_list = []
-    seq_feat_num = train_match_data['rp0'][0].shape[1]
 
     for p in team_keys:
-        sub_input = Input(shape=(params['seq_max_len'], seq_feat_num))
-        input_list.append(sub_input)
+        p_hist_input = Input(shape=(params['seq_max_len'], params['seq_feat_num']))
+        input_list.append(p_hist_input)
         train_data_p = sequence.pad_sequences([transform_match_hist(
                                                 match_hist_data[match_data[p]], match_data['t']
                                                ) for match_data in train_match_data],
@@ -92,9 +92,9 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
-        mask_input = mask_layer(sub_input)
-        sub_output = gru_layer(mask_input)
-        drop_output = drop_layer(sub_output)
+        mask_output = mask_layer(p_hist_input)
+        gru_output = gru_layer(mask_output)
+        drop_output = drop_layer(gru_output)
         output_list.append(drop_output)
 
     return output_list
@@ -109,10 +109,12 @@ def team_champ_embed(champ_embed, champ_bias, train_match_data, test_match_data,
         team_keys = ['bc0', 'bc1', 'bc2', 'bc3', 'bc4']
     champ_input = Input(shape=(5,))
     input_list.append(champ_input)
-    train_list.append(([[match_data[k] for k in team_keys] for match_data in train_match_data]))
-    test_list.append(([[match_data[k] for k in team_keys] for match_data in test_match_data]))
+    train_list.append(numpy.array(
+        [[match_data[k] for k in team_keys] for match_data in train_match_data]))
+    test_list.append(numpy.array(
+        [[match_data[k] for k in team_keys] for match_data in test_match_data]))
     champ_embed_output = champ_embed(champ_input)
-    champ_bias_output = K.sum(champ_bias(champ_input))
+    champ_bias_output = champ_bias(champ_input)
     return champ_embed_output, champ_bias_output
 
 
@@ -126,32 +128,31 @@ def team_player_champ_lstm_embed(train_match_data, test_match_data, match_hist_d
         team_keys = [('bp0', 'bc0'), ('bp1', 'bc1'), ('bp2', 'bc2'), ('bp3', 'bc3'), ('bp4', 'bc4')]
 
     output_list = []
-    seq_feat_num = train_match_data['rp0'][0].shape[1]
 
     for p, c in team_keys:
-        p_hist_input = Input(shape=(params['seq_max_len'], seq_feat_num))
+        p_hist_input = Input(shape=(params['seq_max_len'], params['seq_feat_num']))
         input_list.append(p_hist_input)
         train_data_p = sequence.pad_sequences([transform_match_hist(
-                                               match_hist_data[match_data[p]]
+                                               match_hist_data[match_data[p]], match_data['t']
                                                ) for match_data in train_match_data],
                                               maxlen=params['seq_max_len'])
         test_data_p = sequence.pad_sequences([transform_match_hist(
-                                               match_hist_data[match_data[p]]
+                                               match_hist_data[match_data[p]], match_data['t']
                                                ) for match_data in test_match_data],
                                               maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
-        mask_input = mask_layer(p_hist_input)
-        sub_output = gru_layer(mask_input)
-        drop_output = drop_layer(sub_output)
+        mask_output = mask_layer(p_hist_input)
+        gru_output = gru_layer(mask_output)
+        drop_output = drop_layer(gru_output)
 
         c_input = Input(shape=(1,))
         input_list.append(c_input)
         train_list.append([match_data[c] for match_data in train_match_data])
         test_list.append([match_data[c] for match_data in test_match_data])
         champ_one_hot_output = champ_one_hot(c_input)
-        dropout_champ_one_hot = merge([drop_output, champ_one_hot_output], mode='concat',
-                                      output_shape=(params['n_hidden'] + params['champion_num'],))
+        # output shape: 2 * params['n_hidden'] + params['champion_num']
+        dropout_champ_one_hot = Concatenate()([drop_output, champ_one_hot_output])
         player_champ_output = player_champ_matrix(dropout_champ_one_hot)
         output_list.append(player_champ_output)
 
@@ -169,10 +170,9 @@ def team_player_champ_lstm_nn(train_match_data, test_match_data, match_hist_data
 
     p_output_list = []
     c_output_list = []
-    seq_feat_num = train_match_data['rp0'][0].shape[1]
 
     for p, c in team_keys:
-        p_hist_input = Input(shape=(params['seq_max_len'], seq_feat_num))
+        p_hist_input = Input(shape=(params['seq_max_len'], params['seq_feat_num']))
         input_list.append(p_hist_input)
         train_data_p = sequence.pad_sequences([transform_match_hist(
                                                 match_hist_data[match_data[p]]
@@ -184,9 +184,9 @@ def team_player_champ_lstm_nn(train_match_data, test_match_data, match_hist_data
                                              maxlen=params['seq_max_len'])
         train_list.append(train_data_p)
         test_list.append(test_data_p)
-        mask_input = mask_layer(p_hist_input)
-        sub_output = gru_layer(mask_input)
-        drop_output = drop_layer(sub_output)
+        mask_output = mask_layer(p_hist_input)
+        gru_output = gru_layer(mask_output)
+        drop_output = drop_layer(gru_output)
         p_output_list.append(drop_output)
 
         c_input = Input(shape=(1,))
@@ -204,16 +204,18 @@ def team_player_champ_lstm_nn(train_match_data, test_match_data, match_hist_data
     player_embed_mat = K.tf.stack(p_output_list)
     champ_onehot_mat = K.tf.transpose(K.tf.stack(c_output_list))
     out = K.tf.matmul(champ_onehot_mat, player_embed_mat)
-    out_flat = Reshape((params['champion_num'] * params['n_hidden'],))(out)
+    out_flat = Reshape((params['champion_num'] * 2 * params['n_hidden'],))(out)
     # concatenate champion one hot encoding so that we can capture pure champion interaction
-    champ_onehot_vec = merge(c_output_list, mode='sum', output_shape=(params['champion_num'],))
-    out_final = merge([out_flat, champ_onehot_vec], mode='concat',
-                      output_shape=((params['n_hidden'] + 1) * params['champion_num'],))
+    # output shape: params['champion_num']
+    champ_onehot_vec = Add()(c_output_list)
+    # output shape: (2 * params['n_hidden'] + 1) * params['champion_num']
+    out_final = Concatenate()([out_flat, champ_onehot_vec])
     return out_final
 
 
 def synergy(team_embeds, syng_mat):
-    team_embed_vec = merge(team_embeds, mode='sum', output_shape=(params['n_hidden'],))
+    # output_shape: params['n_hidden']
+    team_embed_vec = Add()(team_embeds)
     a = dot([syng_mat(team_embed_vec), team_embed_vec], axes=-1)
     for team_embed in team_embeds:
         b = dot([syng_mat(team_embed), team_embed], axes=-1)
@@ -222,8 +224,9 @@ def synergy(team_embeds, syng_mat):
 
 
 def opposition(red_team_embeds, blue_team_embeds, oppo_mat):
-    red_team_embed_vec = merge(red_team_embeds, mode='sum', output_shape=(params['n_hidden'],))
-    blue_team_embed_vec = merge(blue_team_embeds, mode='sum', output_shape=(params['n_hidden'],))
+    # output_shape: params['n_hidden']
+    red_team_embed_vec = Add()(red_team_embeds)
+    blue_team_embed_vec = Add()(blue_team_embeds)
     a = dot([oppo_mat(red_team_embed_vec), blue_team_embed_vec], axes=-1)
     b = dot([oppo_mat(blue_team_embed_vec), red_team_embed_vec], axes=-1)
     c = subtract([a, b])
@@ -236,33 +239,36 @@ def create_model(train_data, test_data, match_hist_data):
     test_list = []
     y_act = None
 
-    seq_feat_num = train_data['rp0'][0].shape[1]
-    mask_layer = Masking(mask_value=0, input_shape=(params['seq_max_len'], seq_feat_num))
-    gru_layer = Bidirectional(GRU(output_dim=params['n_hidden'], return_sequences=False, consume_less='mem'))
+    mask_layer = Masking(mask_value=0, input_shape=(params['seq_max_len'], params['seq_feat_num']))
+    # bidirectional output dimension will double, i.e., output shape: 2 * params['n_hidden']
+    gru_layer = Bidirectional(GRU(return_sequences=False, units=params['n_hidden'], implementation=1))
     drop_layer = Dropout(params['dropout'])
 
     if params['idx'] == 1:
+        # shape = (, 2 * params['n_hidden']) if bidirectional
         red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
                                                    mask_layer, gru_layer, drop_layer,
                                                    input_list, train_list, test_list)
         blue_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'blue',
                                                     mask_layer, gru_layer, drop_layer,
                                                     input_list, train_list, test_list)
-        red_player_embed = merge(red_player_embeds, mode='sum', output_shape=(params['n_hidden'],))
-        blue_player_embed = merge(blue_player_embeds, mode='sum', output_shape=(params['n_hidden'],))
-        y = subtract([red_player_embed, blue_player_embed])
+        red_player_embed = Add()(red_player_embeds)
+        blue_player_embed = Add()(blue_player_embeds)
+        y = Subtract()([red_player_embed, blue_player_embed])
         # bias=True for red/blue team difference.
-        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='uniform')(y)
+        y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='uniform')(y)
     elif params['idx'] == 2:
+        # shape = (, 2 * params['n_hidden']) if bidirectional
         red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
                                                    mask_layer, gru_layer, drop_layer,
                                                    input_list, train_list, test_list)
         blue_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'blue',
                                                     mask_layer, gru_layer, drop_layer,
                                                     input_list, train_list, test_list)
-        red_player_embed = merge(red_player_embeds, mode='concat', output_shape=(5 * params['n_hidden'],))
-        blue_player_embed = merge(blue_player_embeds, mode='concat', output_shape=(5 * params['n_hidden'],))
-        champ_embed = Embedding(input_dim=params['champion_num'], output_dim=params['n_hidden'],
+        # output_shape: 5 * 2 * params['n_hidden']
+        red_player_embed = Concatenate()(red_player_embeds)
+        blue_player_embed = Concatenate()(blue_player_embeds)
+        champ_embed = Embedding(input_dim=params['champion_num'], output_dim=2 * params['n_hidden'],
                                 input_length=5, embeddings_initializer='uniform')
         champ_bias = Embedding(input_dim=params['champion_num'], output_dim=1,
                                input_length=5, embeddings_initializer='uniform')
@@ -270,15 +276,20 @@ def create_model(train_data, test_data, match_hist_data):
                                                             input_list, train_list, test_list)
         blue_champ_embeds, blue_champ_bias = team_champ_embed(champ_embed, champ_bias, train_data, test_data, 'blue',
                                                               input_list, train_list, test_list)
-        red_champ_embed = Reshape((5 * params['n_hidden'],))(red_champ_embeds)
-        blue_champ_embed = Reshape((5 * params['n_hidden'],))(blue_champ_embeds)
-        red_player_champ_dot = dot([red_player_embed, red_champ_embed], axes=-1)
-        blue_player_champ_dot = dot([blue_player_embed, blue_champ_embed], axes=-1)
-        y = merge([red_player_champ_dot, K.tf.multiply(-1, blue_player_champ_dot),
-                   red_champ_bias, K.tf.multiply(-1, blue_champ_bias)],
-                  mode='concat', output_shape=(4,))
+        red_champ_embed = Reshape((5 * 2 * params['n_hidden'],))(red_champ_embeds)
+        blue_champ_embed = Reshape((5 * 2 * params['n_hidden'],))(blue_champ_embeds)
+        red_player_champ_dot = Dot(axes=-1)([red_player_embed, red_champ_embed])
+        blue_player_champ_dot = Dot(axes=-1)([blue_player_embed, blue_champ_embed])
+        red_champ_bias_sum = Lambda(lambda x: K.sum(x, axis=1))(red_champ_bias)
+        blue_champ_bias_sum = Lambda(lambda x: K.sum(x, axis=1))(blue_champ_bias)
+        # output shape: 4
+        y = Lambda(lambda x: K.concatenate([x[0], -x[1], x[2], -x[3]])) \
+            ([red_player_champ_dot, blue_player_champ_dot, red_champ_bias_sum, blue_champ_bias_sum])
+        # using following will cause AttributeError: 'Tensor' object has no attribute '_keras_history'
+        # y = Concatenate()([red_player_champ_dot, K.tf.multiply(-1., blue_player_champ_dot),
+        #                    red_champ_bias_sum, K.tf.multiply(-1., blue_champ_bias_sum)])
         # bias=True for red/blue team difference. all weights will be normalized relative to the bias's weight
-        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
+        y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='ones', trainable=False)(y)
     elif params['idx'] == 3:
         # set trainable to False as freeze layer.
         # see https://keras.io/getting-started/faq/#how-can-i-freeze-keras-layers
@@ -297,13 +308,13 @@ def create_model(train_data, test_data, match_hist_data):
         blue_player_champ_embed = merge(blue_player_champ_embeds, mode='sum', output_shape=(params['n_hidden'],))
         y = subtract([red_player_champ_embed, blue_player_champ_embed])
         # bias=True for red/blue team difference.
-        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='uniform')(y)
+        y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='uniform')(y)
     elif params['idx'] == 4:
         # set trainable to False as freeze layer.
         # see https://keras.io/getting-started/faq/#how-can-i-freeze-keras-layers
         champ_one_hot = Embedding(input_dim=params['champion_num'], output_dim=params['champion_num'], input_length=1,
                                   embeddings_initializer='identity', trainable=False)
-        player_champ_matrix = Dense(params['n_hidden'], activation='relu', bias=True, kernel_initializer='uniform')
+        player_champ_matrix = Dense(params['n_hidden'], activation='relu', use_bias=True, kernel_initializer='uniform')
         red_player_champ_embeds = team_player_champ_lstm_embed(train_data, test_data, match_hist_data, 'red',
                                                                mask_layer, gru_layer, drop_layer,
                                                                champ_one_hot, player_champ_matrix,
@@ -317,14 +328,14 @@ def create_model(train_data, test_data, match_hist_data):
         player_champ_embed_diff = subtract([red_player_champ_embed, blue_player_champ_embed])
         # bias=True for red/blue team difference.
         z = Dense(1, activation=None, bias=False, kernel_initializer='uniform')(player_champ_embed_diff)
-        syng_mat = Dense(params['n_hidden'], activation=None, bias=False, kernel_initializer='uniform')
-        oppo_mat = Dense(params['n_hidden'], activation=None, bias=False, kernel_initializer='uniform')
+        syng_mat = Dense(params['n_hidden'], activation=None, use_bias=False, kernel_initializer='uniform')
+        oppo_mat = Dense(params['n_hidden'], activation=None, use_bias=False, kernel_initializer='uniform')
         syng_red = synergy(red_player_champ_embeds, syng_mat)
         syng_blue = synergy(blue_player_champ_embeds, syng_mat)
         oppo = opposition(red_player_champ_embeds, blue_player_champ_embeds, oppo_mat)
         y = merge([z, syng_red, K.tf.multiply(-1, syng_blue), oppo], mode='concat', output_shape=(4,))
         # bias=True for red/blue team difference. all weights will be normalized relative to the bias's weight
-        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
+        y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='ones', trainable=False)(y)
     elif params['idx'] == 5:
         # set trainable to False as freeze layer.
         # see https://keras.io/getting-started/faq/#how-can-i-freeze-keras-layers
@@ -339,7 +350,7 @@ def create_model(train_data, test_data, match_hist_data):
         y = merge([red_player_champ_embed, K.tf.multiply(-1, blue_player_champ_embed)],
                   mode='sum', output_shape=(params['champion_num'] * (params['n_hidden'] + 1),))
         # bias=True for red/blue team difference. all weights will be normalized relative to the bias's weight
-        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
+        y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='ones', trainable=False)(y)
     elif params['idx'] == 6:
         # set trainable to False as freeze layer.
         # see https://keras.io/getting-started/faq/#how-can-i-freeze-keras-layers
@@ -351,17 +362,17 @@ def create_model(train_data, test_data, match_hist_data):
         blue_player_champ_embed = team_player_champ_lstm_nn(train_data, test_data, match_hist_data, 'blue',
                                                             mask_layer, gru_layer, drop_layer, champ_one_hot,
                                                             input_list, train_list, test_list)
-        team_embed_matrix = Dense(params['n_hidden1'], activation='relu', bias=True, kernel_initializer='uniform')
+        team_embed_matrix = Dense(params['n_hidden1'], activation='relu', use_bias=True, kernel_initializer='uniform')
         red_team_embed = team_embed_matrix(red_player_champ_embed)
         blue_team_embed = team_embed_matrix(blue_player_champ_embed)
         y = merge([red_team_embed, K.tf.multiply(-1, blue_team_embed)], mode='sum', output_shape=(params['n_hidden1'],))
         # bias=True for red/blue team difference. all weights will be normalized relative to the bias's weight
-        y_act = Dense(1, activation='sigmoid', bias=True, kernel_initializer='ones', trainable=False)(y)
+        y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='ones', trainable=False)(y)
 
     objective = 'binary_crossentropy'
     metric = [acc]
-    model = Model(input=input_list, output=y_act)
-    model.compile(loss=objective, optimizer=RMSprop(lr=params['lr']), metrics=metric)
+    model = Model(inputs=input_list, outputs=y_act)
+    model.compile(loss=objective, optimizer=Adam(lr=params['lr']), metrics=metric)
     return model, train_list, test_list
 
 
@@ -369,7 +380,7 @@ def run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_dat
     # x: raw data, X: transformed data
     model, X_train, X_test = create_model(x_train, x_test, match_hist_data)
     hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
-                     nb_epoch=params['n_epochs'], validation_data=(X_test, y_test))
+                     epochs=params['n_epochs'], validation_data=(X_test, y_test))
     y_score = model.predict(X_test, batch_size=params['batch_size'], verbose=0)
     y_pred = (np.ravel(y_score) > 0.5).astype('int32')
     return y_pred, hist.history
@@ -380,7 +391,10 @@ def train():
         match_hist_data, _, _, _ = pickle.load(f)
     with open(params['match_path'], 'rb') as f:
         match_data = pickle.load(f)
-        assert len(match_data.keys()) <= params['fold']
+        assert len(match_data.keys()) >= params['fold']
+    # for each time series data point,
+    # its dimension is the feature number (excluding champion id) + champion one hot encoding
+    params['seq_feat_num'] = len(match_hist_data[0][0]) + params['champion_num'] - 1
 
     for fold in range(params['fold']):
         # original data format: match_num x each dict contains id of players and champions
@@ -398,12 +412,11 @@ if __name__ == '__main__':
 
     params = {
               'champion_num': M,
-              'match_hist_path': '../input/lol_lstm_match_hist.lol',
-              'match_path': '../input/lol_lstm_match.lol',
+              'match_hist_path': '../input/lol_lstm_match_hist_small.pickle',
+              'match_path': '../input/lol_lstm_match_small.pickle',
               'fold': 1,
-              'seq_min_len': 10,
-              'seq_max_len': 1500,
-              'batch_size': 256,
+              'seq_max_len': 1000,
+              'batch_size': 16,
               'lr': 0.001,
               'dropout': 0.0,
               'n_epochs': 500,
