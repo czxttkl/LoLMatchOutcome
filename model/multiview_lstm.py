@@ -5,7 +5,6 @@ A demo of DeepMood on synthetic data.
 '''
 
 from __future__ import print_function
-import random
 from keras.models import *
 from keras.optimizers import *
 from keras.layers import *
@@ -16,6 +15,46 @@ from keras.layers.normalization import *
 from keras.preprocessing import sequence
 import pickle
 import numpy
+
+
+def generate_lstm_data_from_raw(raw_x, raw_y, match_hist_data):
+    i = 0
+    while 1:
+        batch_x, batch_y = raw_x[i:i+params['batch_size']], raw_y[i:i+params['batch_size']]
+
+        if params['idx'] == 1:
+            team_keys = ['rp0', 'rp1', 'rp2', 'rp3', 'rp4', 'bp0', 'bp1', 'bp2', 'bp3', 'bp4']
+            input_list = []
+            for p in team_keys:
+                train_data_p = sequence.pad_sequences(
+                    [transform_match_hist(
+                        match_hist_data[x[p]], x['t']
+                     ) for x in batch_x], maxlen=params['seq_max_len'])
+                input_list.append(train_data_p)
+            datum = (input_list, batch_y)
+            yield datum
+        if params['idx'] == 2:
+            team_p_keys = ['rp0', 'rp1', 'rp2', 'rp3', 'rp4', 'bp0', 'bp1', 'bp2', 'bp3', 'bp4']
+            input_list = []
+            for p in team_p_keys:
+                train_data_p = sequence.pad_sequences(
+                    [transform_match_hist(
+                        match_hist_data[x[p]], x['t']
+                     ) for x in batch_x], maxlen=params['seq_max_len'])
+                input_list.append(train_data_p)
+            team_r_keys = ['rc0', 'rc1', 'rc2', 'rc3', 'rc4']
+            input_list.append(numpy.array([[x[k] for k in team_r_keys] for x in batch_x]))
+            team_b_keys = ['bc0', 'bc1', 'bc2', 'bc3', 'bc4']
+            input_list.append(numpy.array([[x[k] for k in team_b_keys] for x in batch_x]))
+            datum = (input_list, batch_y)
+        if params['idx'] == 3:
+            team_keys = [('rp0', 'rc0'), ('rp1', 'rc1'), ('rp2', 'rc2'), ('rp3', 'rc3'), ('rp4', 'rc4'),
+                         ('bp0', 'bc0'), ('bp1', 'bc1'), ('bp2', 'bc2'), ('bp3', 'bc3'), ('bp4', 'bc4')]
+            datum = None
+
+        # print(i, ":", [input.shape for input in input_list])
+        i = (i + params['batch_size']) % len(raw_y)
+        yield datum
 
 
 def evaluate(y_test, y_pred):
@@ -57,7 +96,7 @@ def transform_match_hist(mh, mt):
     # convert champion into one hot encoding
     champ_vecs = numpy.zeros((len(mh), params['champion_num']))
     # the first column of mh is champion id
-    champ_vecs[:, mh[:, 0].astype(int)] = 1
+    champ_vecs[range(len(mh)), mh[:, 0].astype(int)] = 1
     transformed = numpy.hstack((champ_vecs, mh[:, 1:]))
     # only matches before match time (mt)
     transformed = transformed[transformed[:, -1] < mt, :]
@@ -82,16 +121,16 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
     for p in team_keys:
         p_hist_input = Input(shape=(params['seq_max_len'], params['seq_feat_num']))
         input_list.append(p_hist_input)
-        train_data_p = sequence.pad_sequences([transform_match_hist(
-                                                match_hist_data[match_data[p]], match_data['t']
-                                               ) for match_data in train_match_data],
-                                              maxlen=params['seq_max_len'])
-        test_data_p = sequence.pad_sequences([transform_match_hist(
-                                               match_hist_data[match_data[p]], match_data['t']
-                                               ) for match_data in test_match_data],
-                                             maxlen=params['seq_max_len'])
-        train_list.append(train_data_p)
-        test_list.append(test_data_p)
+        # train_data_p = sequence.pad_sequences([transform_match_hist(
+        #                                         match_hist_data[match_data[p]], match_data['t']
+        #                                        ) for match_data in train_match_data],
+        #                                       maxlen=params['seq_max_len'])
+        # test_data_p = sequence.pad_sequences([transform_match_hist(
+        #                                        match_hist_data[match_data[p]], match_data['t']
+        #                                        ) for match_data in test_match_data],
+        #                                      maxlen=params['seq_max_len'])
+        # train_list.append(train_data_p)
+        # test_list.append(test_data_p)
         mask_output = mask_layer(p_hist_input)
         gru_output = gru_layer(mask_output)
         drop_output = drop_layer(gru_output)
@@ -109,10 +148,10 @@ def team_champ_embed(champ_embed, champ_bias, train_match_data, test_match_data,
         team_keys = ['bc0', 'bc1', 'bc2', 'bc3', 'bc4']
     champ_input = Input(shape=(5,))
     input_list.append(champ_input)
-    train_list.append(numpy.array(
-        [[match_data[k] for k in team_keys] for match_data in train_match_data]))
-    test_list.append(numpy.array(
-        [[match_data[k] for k in team_keys] for match_data in test_match_data]))
+    # train_list.append(numpy.array(
+    #     [[match_data[k] for k in team_keys] for match_data in train_match_data]))
+    # test_list.append(numpy.array(
+    #     [[match_data[k] for k in team_keys] for match_data in test_match_data]))
     champ_embed_output = champ_embed(champ_input)
     champ_bias_output = champ_bias(champ_input)
     return champ_embed_output, champ_bias_output
@@ -379,8 +418,13 @@ def create_model(train_data, test_data, match_hist_data):
 def run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data):
     # x: raw data, X: transformed data
     model, X_train, X_test = create_model(x_train, x_test, match_hist_data)
-    hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
-                     epochs=params['n_epochs'], validation_data=(X_test, y_test))
+    hist = model.fit_generator(generate_lstm_data_from_raw(x_train, y_train, match_hist_data),
+                               steps_per_epoch=len(y_train) / params['batch_size'],
+                               verbose=2, epochs=params['n_epochs'],
+                               validation_data=generate_lstm_data_from_raw(x_valid, y_valid, match_hist_data),
+                               validation_steps=len(y_valid) / params['batch_size'])
+    # hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
+    #                  epochs=params['n_epochs'], validation_data=(X_test, y_test))
     y_score = model.predict(X_test, batch_size=params['batch_size'], verbose=0)
     y_pred = (np.ravel(y_score) > 0.5).astype('int32')
     return y_pred, hist.history
@@ -419,7 +463,7 @@ if __name__ == '__main__':
               'batch_size': 16,
               'lr': 0.001,
               'dropout': 0.0,
-              'n_epochs': 500,
+              'n_epochs': 5,
               'n_hidden': 8,
               # some models require two types of hidden units
               'n_hidden1': 8,
