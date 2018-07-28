@@ -13,6 +13,7 @@ from keras.layers.recurrent import *
 from keras.layers.wrappers import *
 from keras.layers.normalization import *
 from keras.preprocessing import sequence
+from keras.callbacks import EarlyStopping, ModelCheckpoint
 import pickle
 import numpy
 
@@ -57,31 +58,15 @@ def generate_lstm_data_from_raw(raw_x, raw_y, match_hist_data):
         yield datum
 
 
-def evaluate(y_test, y_pred):
+def evaluate(y_test, y_pred, prefix):
     res = {}
-    res['accuracy'] = float(sum(y_test == y_pred)) / len(y_test)
-    res['precision'] = float(sum(y_test & y_pred) + 1) / (sum(y_pred) + 1)
-    res['recall'] = float(sum(y_test & y_pred) + 1) / (sum(y_test) + 1)
-    res['f_score'] = 2.0 * res['precision'] * res['recall'] / (res['precision'] + res['recall'])
+    res[prefix + '_acc'] = float(sum(y_test == y_pred)) / len(y_test)
+    res[prefix + '_precision'] = float(sum(y_test & y_pred) + 1) / (sum(y_pred) + 1)
+    res[prefix + '_recall'] = float(sum(y_test & y_pred) + 1) / (sum(y_test) + 1)
+    res[prefix + '_fscore'] = \
+        2.0 * res[prefix + '_precision'] * res[prefix + '_recall'] / (res[prefix + '_precision'] + res[prefix + '_recall'])
     print(' '.join(["%s: %.4f" % (i, res[i]) for i in res]))
     return res
-
-
-def mvm_decision_function(arg):
-    n_modes = len(arg)
-    latentx = arg
-    y = K.concatenate([K.sum(
-        K.prod(K.stack([latentx[j][:, i * params['n_latent']: (i + 1) * params['n_latent']] for j in range(n_modes)]),
-               axis=0),
-        axis=-1, keepdims=True) for i in range(params['n_classes'])])
-    return y
-
-
-def fm_decision_function(arg):
-    latentx, bias = arg[0], arg[1]
-    pairwise = K.sum(K.square(latentx), axis=-1, keepdims=True)
-    y = K.sum(K.tf.stack([pairwise, bias]), axis=0)
-    return y
 
 
 def acc(y_true, y_pred):
@@ -107,9 +92,7 @@ def transform_match_hist(mh, mt):
     return transformed
 
 
-def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, team,
-                           mask_layer, gru_layer, drop_layer,
-                           input_list, train_list, test_list):
+def team_player_lstm_embed(team, mask_layer, gru_layer, drop_layer, input_list):
     team_keys = []
     if team == 'red':
         team_keys = ['rp0', 'rp1', 'rp2', 'rp3', 'rp4']
@@ -139,8 +122,7 @@ def team_player_lstm_embed(train_match_data, test_match_data, match_hist_data, t
     return output_list
 
 
-def team_champ_embed(champ_embed, champ_bias, train_match_data, test_match_data, team,
-                     input_list, train_list, test_list):
+def team_champ_embed(champ_embed, champ_bias, team, input_list):
     team_keys = []
     if team == 'red':
         team_keys = ['rc0', 'rc1', 'rc2', 'rc3', 'rc4']
@@ -285,12 +267,8 @@ def create_model(train_data, test_data, match_hist_data):
 
     if params['idx'] == 1:
         # shape = (, 2 * params['n_hidden']) if bidirectional
-        red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
-                                                   mask_layer, gru_layer, drop_layer,
-                                                   input_list, train_list, test_list)
-        blue_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'blue',
-                                                    mask_layer, gru_layer, drop_layer,
-                                                    input_list, train_list, test_list)
+        red_player_embeds = team_player_lstm_embed('red', mask_layer, gru_layer, drop_layer, input_list)
+        blue_player_embeds = team_player_lstm_embed('blue', mask_layer, gru_layer, drop_layer, input_list)
         red_player_embed = Add()(red_player_embeds)
         blue_player_embed = Add()(blue_player_embeds)
         y = Subtract()([red_player_embed, blue_player_embed])
@@ -298,12 +276,8 @@ def create_model(train_data, test_data, match_hist_data):
         y_act = Dense(1, activation='sigmoid', use_bias=True, kernel_initializer='uniform')(y)
     elif params['idx'] == 2:
         # shape = (, 2 * params['n_hidden']) if bidirectional
-        red_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'red',
-                                                   mask_layer, gru_layer, drop_layer,
-                                                   input_list, train_list, test_list)
-        blue_player_embeds = team_player_lstm_embed(train_data, test_data, match_hist_data, 'blue',
-                                                    mask_layer, gru_layer, drop_layer,
-                                                    input_list, train_list, test_list)
+        red_player_embeds = team_player_lstm_embed('red', mask_layer, gru_layer, drop_layer, input_list)
+        blue_player_embeds = team_player_lstm_embed('blue', mask_layer, gru_layer, drop_layer, input_list)
         # output_shape: 5 * 2 * params['n_hidden']
         red_player_embed = Concatenate()(red_player_embeds)
         blue_player_embed = Concatenate()(blue_player_embeds)
@@ -311,10 +285,8 @@ def create_model(train_data, test_data, match_hist_data):
                                 input_length=5, embeddings_initializer='uniform')
         champ_bias = Embedding(input_dim=params['champion_num'], output_dim=1,
                                input_length=5, embeddings_initializer='uniform')
-        red_champ_embeds, red_champ_bias = team_champ_embed(champ_embed, champ_bias, train_data, test_data, 'red',
-                                                            input_list, train_list, test_list)
-        blue_champ_embeds, blue_champ_bias = team_champ_embed(champ_embed, champ_bias, train_data, test_data, 'blue',
-                                                              input_list, train_list, test_list)
+        red_champ_embeds, red_champ_bias = team_champ_embed(champ_embed, champ_bias, 'red', input_list)
+        blue_champ_embeds, blue_champ_bias = team_champ_embed(champ_embed, champ_bias, 'blue', input_list)
         red_champ_embed = Reshape((5 * 2 * params['n_hidden'],))(red_champ_embeds)
         blue_champ_embed = Reshape((5 * 2 * params['n_hidden'],))(blue_champ_embeds)
         red_player_champ_dot = Dot(axes=-1)([red_player_embed, red_champ_embed])
@@ -412,22 +384,31 @@ def create_model(train_data, test_data, match_hist_data):
     metric = [acc]
     model = Model(inputs=input_list, outputs=y_act)
     model.compile(loss=objective, optimizer=Adam(lr=params['lr']), metrics=metric)
-    return model, train_list, test_list
+    return model
 
 
 def run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data):
     # x: raw data, X: transformed data
-    model, X_train, X_test = create_model(x_train, x_test, match_hist_data)
+    model = create_model(x_train, x_test, match_hist_data)
     hist = model.fit_generator(generate_lstm_data_from_raw(x_train, y_train, match_hist_data),
                                steps_per_epoch=len(y_train) / params['batch_size'],
                                verbose=2, epochs=params['n_epochs'],
                                validation_data=generate_lstm_data_from_raw(x_valid, y_valid, match_hist_data),
-                               validation_steps=len(y_valid) / params['batch_size'])
-    # hist = model.fit(x=X_train, y=y_train, batch_size=params['batch_size'], verbose=2,
-    #                  epochs=params['n_epochs'], validation_data=(X_test, y_test))
-    y_score = model.predict(X_test, batch_size=params['batch_size'], verbose=0)
-    y_pred = (np.ravel(y_score) > 0.5).astype('int32')
-    return y_pred, hist.history
+                               validation_steps=len(y_valid) / params['batch_size'],
+                               callbacks=[EarlyStopping(patience=3, verbose=2)])
+    y_test_score = []
+    for i in range(len(y_test) // params['batch_size'] + 1):
+        x, _ = next(generate_lstm_data_from_raw(x_test, y_test, match_hist_data))
+        tmp_score = model.predict_on_batch(x).flatten().tolist()
+        y_test_score.extend(tmp_score)
+    y_test_score = numpy.array(y_test_score)
+    y_test_pred = (np.ravel(y_test_score) > 0.5).astype('int32')
+    res = evaluate(y_test, y_test_pred, prefix='test')
+    res['train_acc'] = hist.history['acc'][-1]
+    res['train_loss'] = hist.history['loss'][-1]
+    res['val_acc'] = hist.history['val_acc'][-1]
+    res['val_loss'] = hist.history['val_loss'][-1]
+    return res
 
 
 def train():
@@ -440,13 +421,16 @@ def train():
     # its dimension is the feature number (excluding champion id) + champion one hot encoding
     params['seq_feat_num'] = len(match_hist_data[0][0]) + params['champion_num'] - 1
 
+    res = {}
     for fold in range(params['fold']):
         # original data format: match_num x each dict contains id of players and champions
         x_train, y_train = match_data[fold]['train'][0], match_data[fold]['train'][1]
         x_test, y_test = match_data[fold]['test'][0], match_data[fold]['test'][1]
         x_valid, y_valid = match_data[fold]['valid'][0], match_data[fold]['valid'][1]
-        y_pred, hist = run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data)
-        res = evaluate(y_test, y_pred)
+        res_fold = run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data)
+        res[fold] = res_fold
+
+    print(res)
 
 
 if __name__ == '__main__':
@@ -458,12 +442,13 @@ if __name__ == '__main__':
               'champion_num': M,
               'match_hist_path': '../input/lol_lstm_match_hist_small.pickle',
               'match_path': '../input/lol_lstm_match_small.pickle',
+              'model_save_path': '../output/keras_lstm_model.hdf5',
               'fold': 1,
               'seq_max_len': 1000,
               'batch_size': 16,
               'lr': 0.001,
               'dropout': 0.0,
-              'n_epochs': 5,
+              'n_epochs': 10,
               'n_hidden': 8,
               # some models require two types of hidden units
               'n_hidden1': 8,
