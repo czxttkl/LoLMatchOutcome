@@ -13,9 +13,12 @@ from keras.layers.recurrent import *
 from keras.layers.wrappers import *
 from keras.layers.normalization import *
 from keras.preprocessing import sequence
-from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.callbacks import EarlyStopping
+from sklearn.metrics import roc_auc_score
+import time
 import pickle
 import numpy
+import pprint
 
 
 def generate_lstm_data_from_raw(raw_x, raw_y, match_hist_data):
@@ -58,15 +61,46 @@ def generate_lstm_data_from_raw(raw_x, raw_y, match_hist_data):
         yield datum
 
 
-def evaluate(y_test, y_pred, prefix):
+def evaluate(y_target, y_score, prefix):
+    y_pred = (np.ravel(y_score) > 0.5).astype('int32')
     res = {}
-    res[prefix + '_acc'] = float(sum(y_test == y_pred)) / len(y_test)
-    res[prefix + '_precision'] = float(sum(y_test & y_pred) + 1) / (sum(y_pred) + 1)
-    res[prefix + '_recall'] = float(sum(y_test & y_pred) + 1) / (sum(y_test) + 1)
+    res[prefix + '_acc'] = float(sum(y_target == y_pred)) / len(y_target)
+    res[prefix + '_precision'] = float(sum(y_target & y_pred) + 1) / (sum(y_pred) + 1)
+    res[prefix + '_recall'] = float(sum(y_target & y_pred) + 1) / (sum(y_target) + 1)
     res[prefix + '_fscore'] = \
         2.0 * res[prefix + '_precision'] * res[prefix + '_recall'] / (res[prefix + '_precision'] + res[prefix + '_recall'])
+    res[prefix + '_auc'] = roc_auc_score(y_target, y_score)
     print(' '.join(["%s: %.4f" % (i, res[i]) for i in res]))
     return res
+
+
+def write_result(res):
+    path = 'lstm_result.csv'
+    header = 'model_idx, spec, duration, epoch, train_acc, train_loss, valid_acc, valid_loss, test_acc, test_precision, test_recall, test_fscore, test_auc'
+    if not os.path.exists(path):
+        with open(path, 'w') as f:
+            line = header + '\n'
+            f.write(line)
+
+    model_spec = 'f{}_b{}_h{},{}'.format(params['fold'], params['batch_size'], params['n_hidden'], params['n_hidden1'])
+    metrics = ['duration', 'epoch', 'train_acc', 'train_loss', 'val_acc', 'val_loss',
+               'test_acc', 'test_precision', 'test_recall', 'test_fscore', 'test_auc']
+    ave_res = {}
+    for metric in metrics:
+        ave_res[metric] = numpy.mean([res[fold][metric] for fold in res])
+
+    with open(path, 'a') as f:
+        line = "{}, {:>15s}, {:.2f}, {:.2f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}, {:.5f}\n" \
+            .format(params['idx'], model_spec, ave_res['duration'], ave_res['epoch'],
+                    ave_res['train_acc'], ave_res['train_loss'],
+                    ave_res['val_acc'], ave_res['val_loss'],
+                    ave_res['test_acc'], ave_res['test_precision'],
+                    ave_res['test_recall'], ave_res['test_fscore'],
+                    ave_res['test_auc'])
+        f.write(line)
+
+    print(header)
+    print(line)
 
 
 def acc(y_true, y_pred):
@@ -402,12 +436,12 @@ def run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_dat
         tmp_score = model.predict_on_batch(x).flatten().tolist()
         y_test_score.extend(tmp_score)
     y_test_score = numpy.array(y_test_score)
-    y_test_pred = (np.ravel(y_test_score) > 0.5).astype('int32')
-    res = evaluate(y_test, y_test_pred, prefix='test')
+    res = evaluate(y_test, y_test_score, prefix='test')
     res['train_acc'] = hist.history['acc'][-1]
     res['train_loss'] = hist.history['loss'][-1]
     res['val_acc'] = hist.history['val_acc'][-1]
     res['val_loss'] = hist.history['val_loss'][-1]
+    res['epoch'] = len(hist.history['acc'])
     return res
 
 
@@ -423,14 +457,17 @@ def train():
 
     res = {}
     for fold in range(params['fold']):
+        start_time = time.time()
         # original data format: match_num x each dict contains id of players and champions
+        # see data_collect/lol_lstm.py
         x_train, y_train = match_data[fold]['train'][0], match_data[fold]['train'][1]
         x_test, y_test = match_data[fold]['test'][0], match_data[fold]['test'][1]
         x_valid, y_valid = match_data[fold]['valid'][0], match_data[fold]['valid'][1]
         res_fold = run_model(x_train, x_test, x_valid, y_train, y_test, y_valid, match_hist_data)
+        res_fold['duration'] = time.time() - start_time
         res[fold] = res_fold
-
-    print(res)
+    pprint.pprint(res)
+    write_result(res)
 
 
 if __name__ == '__main__':
@@ -442,12 +479,11 @@ if __name__ == '__main__':
               'champion_num': M,
               'match_hist_path': '../input/lol_lstm_match_hist_small.pickle',
               'match_path': '../input/lol_lstm_match_small.pickle',
-              'model_save_path': '../output/keras_lstm_model.hdf5',
-              'fold': 1,
+              'fold': 3,
               'seq_max_len': 1000,
               'batch_size': 16,
               'lr': 0.001,
-              'dropout': 0.0,
+              'dropout': 0.1,
               'n_epochs': 10,
               'n_hidden': 8,
               # some models require two types of hidden units
@@ -464,4 +500,5 @@ if __name__ == '__main__':
               # 6: fully-connected nn, each champion has a lstm block,
               # then form a team embedding, then two team embedding sum
               }
+    pprint.pprint(params)
     train()
