@@ -1,5 +1,11 @@
 """
 Use this file to generate data for lstm
+
+Running this file requires connection to mongodb
+cd mongodb-linux-x86_64-ubuntu1604-3.6.2/
+bin/mongod --dbpath <data_path>
+
+See data/README.md for how to import mongodb data
 """
 import pickle
 import time
@@ -18,6 +24,9 @@ def get_data():
         # M: number of champions, N: number of players
         champion_id2idx_dict, M, summoner_id2idx_dict, N = pickle.load(f)
 
+    # match_id_record is a dictionary of dictionary
+    # it records what match ids should be included in each fold, and each
+    #  dataset (train, valid, test)
     with open('../input/lol_match_id_record.pickle', 'rb') as f:
         match_id_record = pickle.load(f)
 
@@ -25,8 +34,10 @@ def get_data():
     for cnt, match in enumerate(mypymongo.db.match_seed.find({}, no_cursor_timeout=True)):
         if cnt % 10 == 0:
             print("process {} match".format(cnt))
-        if cnt == 200:
-            break
+
+        # uncomment if you want to get a small dataset for test
+        # if cnt == 200:
+        #     break
 
         x = {}
         r_cnt, b_cnt = 0, 0
@@ -40,11 +51,15 @@ def get_data():
                 break
 
             if participant['side'] == 'red':
+                # red team player index
                 x['rp' + str(r_cnt)] = summoner_id2idx_dict[participant['accountId']]
+                # red team champion index
                 x['rc' + str(r_cnt)] = champion_id2idx_dict[participant['championId']]
                 r_cnt += 1
             else:
+                # blue team player index
                 x['bp' + str(b_cnt)] = summoner_id2idx_dict[participant['accountId']]
+                # blue team champion index
                 x['bc' + str(b_cnt)] = champion_id2idx_dict[participant['championId']]
                 b_cnt += 1
 

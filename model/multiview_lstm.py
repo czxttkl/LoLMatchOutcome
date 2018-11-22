@@ -19,6 +19,7 @@ import time
 import pickle
 import numpy
 import pprint
+from utils.parser import parse_lstm_parameters
 
 
 def generate_lstm_data_from_raw(raw_x, raw_y, match_hist_data):
@@ -82,7 +83,7 @@ def write_result(res):
             line = header + '\n'
             f.write(line)
 
-    model_spec = 'f{}_b{}_h{},{}'.format(params['fold'], params['batch_size'], params['n_hidden'], params['n_hidden1'])
+    model_spec = 'f{}_b{}_h{}&{}'.format(params['fold'], params['batch_size'], params['n_hidden'], params['n_hidden1'])
     metrics = ['duration', 'epoch', 'train_acc', 'train_loss', 'val_acc', 'val_loss',
                'test_acc', 'test_precision', 'test_recall', 'test_fscore', 'test_auc']
     ave_res = {}
@@ -481,24 +482,15 @@ if __name__ == '__main__':
               'match_path': '../input/lol_lstm_match_small.pickle',
               'fold': 3,
               'seq_max_len': 1000,
-              'batch_size': 16,
-              'lr': 0.001,
+              'batch_size': 32,
+              'lr': 0.01,
               'dropout': 0.1,
               'n_epochs': 10,
               'n_hidden': 8,
               # some models require two types of hidden units
               'n_hidden1': 8,
-              'n_classes': 1,
-              # 'bias': 1,
-              # 'is_clf': 1,
               'idx': 2,
-              # 1: player lstm average,
-              # 2: player lstm - champion embedding dot product,
-              # 3: player contextualized by champion one-hot 
-              # 4: 3 + synergy + opposition
-              # 5: fully-connected nn, each champion has a lstm block, then two teams sum
-              # 6: fully-connected nn, each champion has a lstm block,
-              # then form a team embedding, then two team embedding sum
-              }
+                            }
+    params = parse_lstm_parameters(params)
     pprint.pprint(params)
     train()
